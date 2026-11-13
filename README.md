@@ -5,7 +5,7 @@ units: it connects to the car over the ENET cable, opens SSH if it is closed, in
 [NBT-AAD](https://github.com/Sq00ky/Supra-iDrive6-Android-Auto) (native Android Auto by Sq00ky / nanaisu) with a few
 options, and can close SSH again at the end. No PuTTY, no USB stick.
 
-**Status: 1.0.0, not tested in a car yet.** The transfer layer and every head-unit script were run against a simulated
+**Status: 1.0.1, not tested in a car yet.** The transfer layer and every head-unit script were run against a simulated
 unit (OpenSSH + the same shell scripts); the first car tests are on a MINI F60 (`NBTevo_Y21432J`).
 
 ## What it does

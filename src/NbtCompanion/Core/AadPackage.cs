@@ -26,7 +26,7 @@ namespace NbtCompanion.Core
         public static AadPackage FromRelease(string tag, byte[] daemon, byte[] releasesZip)
         {
             var p = new AadPackage { Tag = tag, Daemon = daemon };
-            CheckQnxArmElf(daemon, "nbt-aad");
+            CheckQnxArmProgram(daemon, "nbt-aad");
             p.Build = BuildOf(daemon);
             p.HasLicenseFlag = Contains(daemon, "--license");
             p.HasPfFlags = Contains(daemon, "nbt-aad --pf-install");
@@ -53,7 +53,7 @@ namespace NbtCompanion.Core
                     p.Plugin[name] = ms.ToArray();
                 }
             }
-            CheckQnxArmElf(p.Plugin["libNbtAad.so"], "libNbtAad.so");
+            CheckQnxArmLibrary(p.Plugin["libNbtAad.so"], "libNbtAad.so");
             foreach (string z in new[] { "NbtAad_ALL_Texts.zip", "NbtAad_ALL_Images.zip" })
             {
                 CheckZip(p.Plugin[z], z);
@@ -73,8 +73,42 @@ namespace NbtCompanion.Core
             get { return Daemon.Length + Plugin.Values.Sum(b => (long)b.Length); }
         }
 
-        /// <summary>ELF, 32 bit, little endian, ARM (e_machine 40), QNX loader /usr/lib/ldqnx.so.2.</summary>
-        public static void CheckQnxArmElf(byte[] b, string what)
+        /// <summary>
+        /// Program for the head unit: ELF 32 bit, little endian, ARM (e_machine 40), executable (e_type 2),
+        /// QNX loader /usr/lib/ldqnx.so.2 as interpreter.
+        /// </summary>
+        public static void CheckQnxArmProgram(byte[] b, string what)
+        {
+            int type = CheckArmElf(b, what);
+            if (type != 2)
+            {
+                throw new StepException(what + L.T(": non e' un programma eseguibile (tipo ELF ", ": not an executable program (ELF type ") + type + ").");
+            }
+            if (!Contains(b, "ldqnx.so"))
+            {
+                throw new StepException(what + L.T(": non e' un programma QNX (manca ldqnx.so).", ": not a QNX program (no ldqnx.so)."));
+            }
+        }
+
+        /// <summary>
+        /// Library for the HMI: ELF 32 bit, little endian, ARM, shared object (e_type 3). A shared object has no
+        /// interpreter: it is recognised as QNX by its C library (libc.so.N, never Linux's ld-linux / libc.so.6).
+        /// </summary>
+        public static void CheckQnxArmLibrary(byte[] b, string what)
+        {
+            int type = CheckArmElf(b, what);
+            if (type != 3)
+            {
+                throw new StepException(what + L.T(": non e' una libreria condivisa (tipo ELF ", ": not a shared library (ELF type ") + type + ").");
+            }
+            if (!Contains(b, "libc.so.") || Contains(b, "ld-linux") || Contains(b, "libc.so.6"))
+            {
+                throw new StepException(what + L.T(": non e' una libreria QNX.", ": not a QNX library."));
+            }
+        }
+
+        /// <summary>Common header checks; returns e_type.</summary>
+        private static int CheckArmElf(byte[] b, string what)
         {
             bool elf = b.Length > 52 && b[0] == 0x7F && b[1] == (byte)'E' && b[2] == (byte)'L' && b[3] == (byte)'F';
             if (!elf || b[4] != 1 || b[5] != 1)
@@ -86,10 +120,7 @@ namespace NbtCompanion.Core
             {
                 throw new StepException(what + L.T(": ELF non ARM (macchina ", ": ELF not ARM (machine ") + machine + ").");
             }
-            if (!Contains(b, "ldqnx.so"))
-            {
-                throw new StepException(what + L.T(": non e' un programma QNX (manca ldqnx.so).", ": not a QNX program (no ldqnx.so)."));
-            }
+            return b[16] | (b[17] << 8);
         }
 
         private static void CheckZip(byte[] b, string what)
