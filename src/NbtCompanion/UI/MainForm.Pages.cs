@@ -365,11 +365,17 @@ namespace NbtCompanion.UI
                 throw new StepException(L.T("Nessuna scheda di rete con indirizzo 169.254.x.x.", "No network adapter with a 169.254.x.x address."));
             }
             _disc = DiagNet.Discover(3000);
-            if (_disc == null)
+            string? gateway = _disc?.Gateway;
+            if (_disc != null)
             {
-                throw new StepException(L.T("La testata non risponde all'annuncio HSFZ (6811): non scrivo nulla.", "The head unit does not answer the HSFZ announcement (6811): nothing written."));
+                Log.Write("Testata: telaio " + _disc.Vin + " via " + _disc.Gateway);
             }
-            Log.Write("Testata: telaio " + _disc.Vin + " via " + _disc.Gateway);
+            else
+            {
+                // The answer to the 6811 broadcast can be stopped by the Windows firewall. The script does its own
+                // discovery and falls back to 169.254.199.99; without a head unit it stops before writing (ABORTED).
+                Log.Write("Annuncio HSFZ (6811) senza risposta (firewall di Windows?): lo script di Xayanix cerca la testata da solo, poi prova 169.254.199.99");
+            }
             if (_hu != null)
             {
                 try
@@ -383,7 +389,7 @@ namespace NbtCompanion.UI
                 _hu.Dispose();
                 _hu = null;
             }
-            if (!Unlocker.Flash(py, script, _disc.Gateway, revert))
+            if (!Unlocker.Flash(py, script, gateway, revert))
             {
                 throw new StepException(L.T("Lo script non ha confermato la scrittura (vedi log): starter.cfg non cambiato.",
                     "The script did not confirm the write (see the log): starter.cfg not changed."));
@@ -392,7 +398,7 @@ namespace NbtCompanion.UI
             {
                 Log.Write("starter.cfg di fabbrica scritto. Attendo il riavvio (90 s) e controllo che la porta 22 sia chiusa.");
                 System.Threading.Thread.Sleep(90000);
-                string? still = DiagNet.FindSsh(_settings.Host, _disc.Gateway, 2000);
+                string? still = DiagNet.FindSsh(_settings.Host, gateway, 2000);
                 _sshOpen = still != null;
                 if (still != null)
                 {
@@ -404,7 +410,7 @@ namespace NbtCompanion.UI
             else
             {
                 Log.Write("OPT_DEBUG RUN scritto. Attendo che la testata riparta con SSH (fino a 180 s).");
-                string? host = DiagNet.WaitForSsh(_settings.Host, _disc.Gateway, 180, System.Threading.CancellationToken.None);
+                string? host = DiagNet.WaitForSsh(_settings.Host, gateway, 180, System.Threading.CancellationToken.None);
                 _sshOpen = host != null;
                 if (host == null)
                 {
