@@ -19,6 +19,7 @@ namespace NbtCompanion.UI
         public static readonly Color AccentPressed = Color.FromArgb(30, 100, 210);
         public static readonly Color AccentDisabled = Color.FromArgb(40, 62, 98);
         public static readonly Color Hover = Color.FromArgb(33, 39, 47);
+        public static readonly Color Thumb = Color.FromArgb(88, 99, 115);
         public static readonly Color Good = Color.FromArgb(63, 185, 80);
         public static readonly Color Bad = Color.FromArgb(248, 81, 73);
         public static readonly Color Warn = Color.FromArgb(210, 153, 34);
@@ -29,35 +30,8 @@ namespace NbtCompanion.UI
         public static readonly Font Bold = new Font("Segoe UI Semibold", 9.75f);
         public static readonly Font Mono = new Font("Consolas", 9.5f);
 
-        [DllImport("uxtheme.dll", CharSet = CharSet.Unicode)]
-        private static extern int SetWindowTheme(IntPtr hWnd, string? appName, string? idList);
-
         [DllImport("dwmapi.dll")]
         private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
-
-        /// <summary>Dark scroll bars on a control with scroll bars (TextBox, RichTextBox, ListView).</summary>
-        public static void DarkScrollBars(Control c)
-        {
-            void apply()
-            {
-                try
-                {
-                    SetWindowTheme(c.Handle, "DarkMode_Explorer", null);
-                }
-                catch (Exception)
-                {
-                    // older Windows: standard scroll bars
-                }
-            }
-            if (c.IsHandleCreated)
-            {
-                apply();
-            }
-            else
-            {
-                c.HandleCreated += (s, e) => apply();
-            }
-        }
 
         public static void DarkTitleBar(Form f)
         {
@@ -113,9 +87,9 @@ namespace NbtCompanion.UI
             };
             if (multiline)
             {
+                // vertical only (the themed bar replaces it, see Frame); long lines wrap, nothing hidden on the right
                 t.ScrollBars = ScrollBars.Vertical;
-                t.WordWrap = !mono;
-                DarkScrollBars(t);
+                t.WordWrap = true;
             }
             return t;
         }
@@ -162,15 +136,7 @@ namespace NbtCompanion.UI
 
         public static ComboBox Combo()
         {
-            return new ComboBox
-            {
-                DropDownStyle = ComboBoxStyle.DropDownList,
-                FlatStyle = FlatStyle.Flat,
-                BackColor = Field,
-                ForeColor = Text,
-                Font = Body,
-                Width = 220,
-            };
+            return new ThemedCombo { Width = 220 };
         }
 
         /// <summary>ListView with dark header (owner drawn) and dark scroll bars.</summary>
@@ -216,26 +182,50 @@ namespace NbtCompanion.UI
                 TextRenderer.DrawText(e.Graphics, e.SubItem.Text, Body, new Rectangle(e.Bounds.X + 6, e.Bounds.Y, e.Bounds.Width - 8, e.Bounds.Height),
                     fore, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis);
             };
-            // the last column fills the width, so the header has no unpainted part on the right
+            // Widths start from the designed ones at every layout: the first column gives up room when the window is
+            // narrow (no horizontal scroll bar) and gets it back when it widens; the last column fills the rest,
+            // so the header has no unpainted part on the right.
+            int[]? design = null;
             lv.Layout += (s, e) =>
             {
                 if (lv.Columns.Count == 0)
                 {
                     return;
                 }
-                int others = 0;
-                for (int i = 0; i < lv.Columns.Count - 1; i++)
+                if (design == null || design.Length != lv.Columns.Count)
                 {
-                    others += lv.Columns[i].Width;
+                    design = new int[lv.Columns.Count];
+                    for (int i = 0; i < lv.Columns.Count; i++)
+                    {
+                        design[i] = lv.Columns[i].Width;
+                    }
                 }
-                int fill = lv.ClientSize.Width - others;
-                ColumnHeader last = lv.Columns[lv.Columns.Count - 1];
-                if (fill > 60 && last.Width != fill)
+                int first = design[0];
+                int others = 0;
+                for (int i = 1; i < lv.Columns.Count - 1; i++)
                 {
-                    last.Width = fill;
+                    others += design[i];
+                }
+                // Room computed as if the vertical scroll bar were always there (inside Frame the list is wider than what is
+                // seen by exactly that bar, which stays hidden): when the bar appears no horizontal one follows.
+                int fill = lv.Width - SystemInformation.VerticalScrollBarWidth - first - others;
+                if (fill < 80 && lv.Columns.Count > 1)
+                {
+                    int newFirst = Math.Max(120, first - (80 - fill));
+                    fill += first - newFirst;
+                    first = newFirst;
+                }
+                if (lv.Columns.Count > 1 && lv.Columns[0].Width != first)
+                {
+                    lv.Columns[0].Width = first;
+                }
+                ColumnHeader last = lv.Columns[lv.Columns.Count - 1];
+                int lastWidth = lv.Columns.Count > 1 ? Math.Max(40, fill) : Math.Max(40, lv.Width - SystemInformation.VerticalScrollBarWidth);
+                if (last.Width != lastWidth)
+                {
+                    last.Width = lastWidth;
                 }
             };
-            DarkScrollBars(lv);
             return lv;
         }
     }

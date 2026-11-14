@@ -5,7 +5,7 @@ units: it connects to the car over the ENET cable, opens SSH if it is closed, in
 [NBT-AAD](https://github.com/Sq00ky/Supra-iDrive6-Android-Auto) (native Android Auto by Sq00ky / nanaisu) with a few
 options, and can close SSH again at the end. No PuTTY, no USB stick.
 
-**Status: 1.0.2, not tested in a car yet.** The transfer layer and every head-unit script were run against a simulated
+**Status: 1.0.3, not tested in a car yet.** The transfer layer and every head-unit script were run against a simulated
 unit (OpenSSH + the same shell scripts); the first car tests are on a MINI F60 (`NBTevo_Y21432J`).
 
 ## What it does
@@ -20,6 +20,7 @@ unit (OpenSSH + the same shell scripts); the first car tests are on a MINI F60 (
 | 6 Former CarLife look | nbt-aa-tile's `aa-menu-look`: "Android Auto" texts and your own PNGs instead of the CarLife ones (MINI, BMW, BMW M, BMW i), factory files backed up once, full restore. |
 | 7 nbt-aad.env | Read, edit, write back (previous version saved on the PC). |
 | 8 Diagnostics | Read-only ZIP with logs and state. Never raw device reads. |
+| 9 NBT Plus apps | [iDrive Plus / NBT Plus](https://github.com/deathwalker80/idrive-plus): downloads the phone APK (generic NBT Plus or MINI / BMW / Supra Plus, GitHub SHA-256 checked) and installs or removes the iDrive plugins of the latest `USB_vNN.zip` with its own `00-installa.sh` / `10-togli.sh`, run from hu-omap's RAM. |
 
 Colour icons of the Android Auto entry (`NbtAad_ALL_Images.zip`) are kept at every update: the ones of the plugin on
 the unit, else the copy kept on the PC, else a file you choose.

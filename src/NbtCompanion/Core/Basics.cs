@@ -185,6 +185,7 @@ namespace NbtCompanion.Core
         public string TileMode { get; set; } = "follow";
         public string MenuLookImages { get; set; } = "";
         public string MenuLookLabel { get; set; } = "Android Auto";
+        public string PlusApp { get; set; } = "nbt";
         public string ApprovedUnlockerCommit { get; set; } = "";
         public string ApprovedUnlockerSha256 { get; set; } = "";
 

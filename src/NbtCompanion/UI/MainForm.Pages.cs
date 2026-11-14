@@ -61,6 +61,8 @@ namespace NbtCompanion.UI
         private static TableLayoutPanel Grid(params (Control control, float share)[] rows)
         {
             var t = new TableLayoutPanel { ColumnCount = 1, RowCount = rows.Length, BackColor = Theme.Panel };
+            // one column as wide as the card: a wide row never pushes fields (and their scroll bars) out of sight
+            t.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             for (int i = 0; i < rows.Length; i++)
             {
                 t.RowStyles.Add(rows[i].share <= 0 ? new RowStyle(SizeType.AutoSize) : new RowStyle(SizeType.Percent, rows[i].share));
@@ -712,7 +714,7 @@ namespace NbtCompanion.UI
             _tLabel.Width = 220;
             _tLabel.Text = _settings.MenuLookLabel;
             _tImages = Theme.TextBox();
-            _tImages.Width = 460;
+            _tImages.Width = 360;
             _tImages.ReadOnly = true;
             _tImages.Text = _settings.MenuLookImages;
             var browse = Theme.Button(L.T("Cartella immagini...", "Images folder..."));
@@ -880,6 +882,160 @@ namespace NbtCompanion.UI
                     Ui(() => _lDiag.Text = path);
                 }), true),
                 Act(L.T("Apri cartella", "Open folder"), () => OpenFolder(AppPaths.Diagnostics)));
+        }
+
+        // ================================================================== 9. NBT Plus apps
+
+        private ComboBox _cbPlus = null!;
+        private Label _lPlusApk = null!;
+        private Label _lPlusUsb = null!;
+        private TextBox _plusOut = null!;
+        private List<GhRelease> _plusReleases = new List<GhRelease>();
+        private Kit? _plusKit;
+
+        private Panel PagePlus()
+        {
+            _cbPlus = Theme.Combo();
+            _cbPlus.Width = 300;
+            _cbPlus.Items.AddRange(NbtPlus.Apps.Cast<object>().ToArray());
+            _cbPlus.SelectedItem = NbtPlus.Apps.FirstOrDefault(a => a.Key == _settings.PlusApp) ?? NbtPlus.Apps[0];
+            _cbPlus.SelectedIndexChanged += (s, e) =>
+            {
+                _settings.PlusApp = PlusApp().Key;
+                _settings.Save();
+                UpdatePlusLabels();
+            };
+            _lPlusApk = Theme.Label("", Theme.Body, Theme.Text);
+            _lPlusUsb = Theme.Label("", Theme.Body, Theme.Text);
+            _plusOut = Output();
+            var form = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, BackColor = Theme.Panel };
+            form.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            form.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            form.Controls.Add(FormLabel(L.T("App sul telefono", "App on the phone")), 0, 0);
+            form.Controls.Add(Row(_cbPlus, Theme.Label(L.T("una sola sul telefono: due insieme si contendono il collegamento con l'iDrive",
+                "only one on the phone: two together fight over the link with the iDrive"), Theme.Small, Theme.Dim)), 1, 0);
+            form.Controls.Add(FormLabel("APK"), 0, 1);
+            form.Controls.Add(_lPlusApk, 1, 1);
+            form.Controls.Add(FormLabel(L.T("Plugin iDrive", "iDrive plugins")), 0, 2);
+            form.Controls.Add(_lPlusUsb, 1, 2);
+            var notes = Theme.Label(L.T(
+                "Da deathwalker80/idrive-plus. L'APK (generico NBT Plus o specifico MINI / BMW / Supra Plus) viene scaricato e controllato (SHA-256 di GitHub) " +
+                "in Documenti\\NBT-Companion\\apk, da copiare sul telefono. I plugin dell'iDrive (Meteo, Notizie, Notizie locali, Carburanti, Traffico, Stato veicolo) " +
+                "vengono installati con lo 00-installa.sh della chiavetta, eseguito dalla RAM di hu-omap: le pagine \"in attesa del telefono\" seguono l'app scelta. " +
+                "Serve NBT-AAD installato. \"Rimuovi\" sposta i plugin in /opt/aa/plugins_off (recuperabili). Riavvio a mano.",
+                "From deathwalker80/idrive-plus. The APK (generic NBT Plus or specific MINI / BMW / Supra Plus) is downloaded and checked (GitHub SHA-256) " +
+                "into Documents\\NBT-Companion\\apk, to copy to the phone. The iDrive plugins (Weather, News, Local news, Fuel, Traffic, Vehicle status) " +
+                "are installed with the stick's 00-installa.sh, run from hu-omap's RAM: the \"waiting for the phone\" pages follow the chosen app. " +
+                "NBT-AAD must be installed. \"Remove\" moves the plugins to /opt/aa/plugins_off (recoverable). Reboot by hand."), Theme.Body, Theme.Dim);
+            notes.MaximumSize = new Size(880, 0);
+            Control content = Grid((form, 0), (notes, 0), (_plusOut, 100));
+            UpdatePlusLabels();
+            return Page(L.T("App NBT Plus (iDrive Plus)", "NBT Plus apps (iDrive Plus)"),
+                L.T("App del telefono e plugin dell'iDrive di NBT Plus / MINI Plus / BMW Plus / Supra Plus.",
+                    "Phone app and iDrive plugins of NBT Plus / MINI Plus / BMW Plus / Supra Plus."),
+                content,
+                Act(L.T("Aggiorna elenco", "Refresh list"), () => RunTask(L.T("Controllo online di iDrive Plus / NBT Plus", "Online check of iDrive Plus / NBT Plus"), LoadPlusReleases, false)),
+                Act(L.T("Scarica APK", "Download APK"), DoPlusApk),
+                Act(L.T("Installa plugin iDrive", "Install iDrive plugins"), DoPlusInstall, true),
+                Act(L.T("Rimuovi plugin", "Remove plugins"), DoPlusRemove),
+                Act(L.T("Stato", "Status"), () => RunTask(L.T("Stato dei plugin", "Plugin status"), () =>
+                {
+                    string o = NbtPlus.Status(_hu!);
+                    Ui(() => _plusOut.Text = o.Replace("\r\n", "\n").Replace("\n", "\r\n"));
+                })));
+        }
+
+        private NbtPlus.AppChoice PlusApp()
+        {
+            return (_cbPlus.SelectedItem as NbtPlus.AppChoice) ?? NbtPlus.Apps[0];
+        }
+
+        private void LoadPlusReleases()
+        {
+            _plusReleases = GitHub.Releases(NbtPlus.Repo);
+            _plusKit = null;
+            NbtPlus.Found? usb = NbtPlus.Usb(_plusReleases);
+            Log.Write("iDrive Plus / NBT Plus online: " + _plusReleases.Count + " pubblicazioni; chiavetta " + (usb != null ? usb.Asset.Name + " (" + usb.Release.Name + ")" : "-"));
+            BeginInvoke(new Action(UpdatePlusLabels));
+        }
+
+        private void UpdatePlusLabels()
+        {
+            if (_lPlusApk == null || _lPlusApk.IsDisposed)
+            {
+                return;
+            }
+            if (_plusReleases.Count == 0)
+            {
+                _lPlusApk.Text = L.T("elenco non letto: \"Aggiorna elenco\"", "list not read: \"Refresh list\"");
+                _lPlusUsb.Text = _lPlusApk.Text;
+                return;
+            }
+            NbtPlus.Found? apk = NbtPlus.Apk(_plusReleases, PlusApp());
+            NbtPlus.Found? usb = NbtPlus.Usb(_plusReleases);
+            _lPlusApk.Text = apk != null ? apk.Asset.Name + "  (" + apk.Release.Name + ", " + apk.Release.Published.ToString("yyyy-MM-dd") + ")" : L.T("nessun APK pubblicato", "no APK published");
+            _lPlusUsb.Text = usb != null ? usb.Asset.Name + "  (" + usb.Release.Name + ", " + usb.Release.Published.ToString("yyyy-MM-dd") + ")" : L.T("nessuna chiavetta pubblicata", "no stick published");
+        }
+
+        private void DoPlusApk()
+        {
+            NbtPlus.Found? apk = NbtPlus.Apk(_plusReleases, PlusApp());
+            if (apk == null)
+            {
+                Warn(L.T("Nessun APK per questa app: premi \"Aggiorna elenco\".", "No APK for this app: press \"Refresh list\"."));
+                return;
+            }
+            RunTask(L.T("Download di ", "Download of ") + apk.Asset.Name, () =>
+            {
+                string path = NbtPlus.DownloadApk(apk);
+                Ui(() => _plusOut.Text = L.T("APK scaricato e controllato: ", "APK downloaded and checked: ") + path
+                    + L.T("\r\nCopialo sul telefono e installalo (una sola app NBT Plus / MINI / BMW / Supra Plus sul telefono).",
+                        "\r\nCopy it to the phone and install it (only one NBT Plus / MINI / BMW / Supra Plus app on the phone)."));
+                OpenFolder(Path.GetDirectoryName(path)!);
+            }, false);
+        }
+
+        private void DoPlusInstall()
+        {
+            NbtPlus.AppChoice app = PlusApp();
+            if (_plusReleases.Count == 0)
+            {
+                Warn(L.T("Elenco non letto: premi \"Aggiorna elenco\".", "List not read: press \"Refresh list\"."));
+                return;
+            }
+            if (!Confirm(L.T("Installo i plugin dell'iDrive (Meteo, Notizie, Notizie locali, Carburanti, Traffico, Stato veicolo) con le pagine per ",
+                    "Install the iDrive plugins (Weather, News, Local news, Fuel, Traffic, Vehicle status) with the pages for ") + app
+                + L.T("? Sono librerie caricate dall'HMI all'avvio. Le librerie in uso vengono rinominate, non sovrascritte.",
+                    "? They are libraries loaded by the HMI at boot. Libraries in use are renamed, not overwritten.")))
+            {
+                return;
+            }
+            RunTask(L.T("Installazione dei plugin iDrive", "iDrive plugins install"), () =>
+            {
+                _plusKit ??= NbtPlus.FetchKit(_plusReleases);
+                string o = NbtPlus.Install(_hu!, _plusKit, app);
+                Ui(() => _plusOut.Text = o.Replace("\r\n", "\n").Replace("\n", "\r\n"));
+            });
+        }
+
+        private void DoPlusRemove()
+        {
+            if (_plusReleases.Count == 0)
+            {
+                Warn(L.T("Elenco non letto: premi \"Aggiorna elenco\".", "List not read: press \"Refresh list\"."));
+                return;
+            }
+            if (!Confirm(L.T("Tolgo i plugin dell'iDrive (spostati in /opt/aa/plugins_off, recuperabili)? Android Auto non viene toccato.",
+                "Remove the iDrive plugins (moved to /opt/aa/plugins_off, recoverable)? Android Auto is not touched.")))
+            {
+                return;
+            }
+            RunTask(L.T("Rimozione dei plugin iDrive", "iDrive plugins removal"), () =>
+            {
+                _plusKit ??= NbtPlus.FetchKit(_plusReleases);
+                string o = NbtPlus.Remove(_hu!, _plusKit);
+                Ui(() => _plusOut.Text = o.Replace("\r\n", "\n").Replace("\n", "\r\n"));
+            });
         }
 
         // ================================================================== state shown on the pages

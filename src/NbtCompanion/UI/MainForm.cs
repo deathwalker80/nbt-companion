@@ -31,7 +31,7 @@ namespace NbtCompanion.UI
         private string _currentPage = "connect";
 
         private Panel _host = null!;
-        private RichTextBox _log = null!;
+        private LogView _log = null!;
         private Chip _stNet = null!;
         private Chip _stUnit = null!;
         private Chip _stSsh = null!;
@@ -75,6 +75,14 @@ namespace NbtCompanion.UI
                 catch (StepException ex)
                 {
                     Log.Write("Elenco di NBT-AAD non disponibile: " + ex.Message.Split('\n')[0]);
+                }
+                try
+                {
+                    LoadPlusReleases();
+                }
+                catch (StepException ex)
+                {
+                    Log.Write("Elenco di iDrive Plus / NBT Plus non disponibile: " + ex.Message.Split('\n')[0]);
                 }
                 CheckSelfUpdate(false);
             }, false, false);
@@ -154,14 +162,9 @@ namespace NbtCompanion.UI
                 L.English = !L.English;
                 _settings.Language = L.English ? "en" : "it";
                 _settings.Save();
-                string? logRtf = _log.Rtf;
+                var logLines = new List<(string text, Color color)>(_log.Lines);
                 BuildUi();
-                if (logRtf != null)
-                {
-                    _log.Rtf = logRtf;
-                }
-                _log.SelectionStart = _log.TextLength;
-                _log.ScrollToCaret();
+                _log.SetLines(logLines);
             };
             header.Controls.Add(lang);
             var upd = Theme.Button(L.T("Aggiornamenti", "Updates"));
@@ -218,6 +221,7 @@ namespace NbtCompanion.UI
             AddNav(nav, "look", "6", L.T("Grafica ex CarLife", "Former CarLife look"));
             AddNav(nav, "env", "7", "nbt-aad.env");
             AddNav(nav, "diag", "8", L.T("Diagnostica", "Diagnostics"));
+            AddNav(nav, "plus", "9", L.T("App NBT Plus", "NBT Plus apps"));
             root.Controls.Add(nav, 0, 3);
 
             // page host
@@ -227,19 +231,7 @@ namespace NbtCompanion.UI
             // log
             var logOuter = new Panel { Dock = DockStyle.Fill, BackColor = Theme.Back, Padding = new Padding(16, 6, 16, 14), Margin = new Padding(0) };
             var logCard = new Card { Dock = DockStyle.Fill, Padding = new Padding(14, 8, 14, 12) };
-            _log = new RichTextBox
-            {
-                Dock = DockStyle.Fill,
-                ReadOnly = true,
-                BackColor = Theme.Back,
-                ForeColor = Theme.Text,
-                BorderStyle = BorderStyle.None,
-                Font = Theme.Mono,
-                WordWrap = false,
-                ScrollBars = RichTextBoxScrollBars.Both,
-                DetectUrls = false,
-            };
-            Theme.DarkScrollBars(_log);
+            _log = new LogView { Dock = DockStyle.Fill };
             var logBar = new TableLayoutPanel { Dock = DockStyle.Top, Height = 46, ColumnCount = 2, BackColor = Theme.Panel };
             logBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
             logBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
@@ -249,7 +241,7 @@ namespace NbtCompanion.UI
             var openLog = Theme.Button(L.T("Apri cartella dei log", "Open log folder"));
             openLog.Click += (s, e) => OpenFolder(AppPaths.Logs);
             var clear = Theme.Button(L.T("Pulisci finestra", "Clear window"));
-            clear.Click += (s, e) => _log.Clear();
+            clear.Click += (s, e) => _log.ClearLines();
             var logButtons = new FlowLayoutPanel { AutoSize = true, WrapContents = false, BackColor = Theme.Panel, Margin = new Padding(0, 2, 0, 0) };
             logButtons.Controls.Add(openLog);
             logButtons.Controls.Add(clear);
@@ -271,6 +263,7 @@ namespace NbtCompanion.UI
             _pages["look"] = PageLook();
             _pages["env"] = PageEnv();
             _pages["diag"] = PageDiag();
+            _pages["plus"] = PagePlus();
             ShowPage(_currentPage);
             RefreshState();
             ResumeLayout(true);
@@ -381,12 +374,13 @@ namespace NbtCompanion.UI
             }
             bool bad = block.Contains("ERRORE") || block.Contains("ERROR") || block.Contains("NBTC-ERROR") || block.Contains("FALLIT") || block.Contains("FAILED");
             bool good = block.Contains("  OK") || block.Contains("NBTC-RESULT: OK") || block.Contains(" OK:") || block.Contains("ALL PASS");
-            _log.SelectionStart = _log.TextLength;
-            _log.SelectionLength = 0;
-            _log.SelectionColor = bad ? Theme.Bad : good ? Theme.Good : Theme.Text;
-            _log.AppendText(block);
-            _log.SelectionColor = Theme.Text;
-            _log.ScrollToCaret();
+            Color color = bad ? Theme.Bad : good ? Theme.Good : Theme.Text;
+            _log.BeginUpdate();
+            foreach (string line in block.Replace("\r\n", "\n").TrimEnd('\n').Split('\n'))
+            {
+                _log.AddLine(line, color);
+            }
+            _log.EndUpdate();
         }
 
         private void RefreshState()
