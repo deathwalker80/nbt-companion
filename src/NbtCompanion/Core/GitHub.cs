@@ -5,6 +5,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text.Json;
+using System.Threading.Tasks;
 
 namespace NbtCompanion.Core
 {
@@ -56,9 +57,22 @@ namespace NbtCompanion.Core
             return h;
         }
 
+        /// <summary>Network errors become a message in clear (offline PC, GitHub not reachable).</summary>
+        private static HttpResponseMessage Fetch(string url)
+        {
+            try
+            {
+                return Http.GetAsync(url).GetAwaiter().GetResult();
+            }
+            catch (Exception ex) when (ex is HttpRequestException || ex is TaskCanceledException)
+            {
+                throw new StepException(L.T("GitHub non raggiungibile (", "GitHub not reachable (") + ex.Message + "): " + url);
+            }
+        }
+
         private static string Get(string url)
         {
-            using HttpResponseMessage resp = Http.GetAsync(url).GetAwaiter().GetResult();
+            using HttpResponseMessage resp = Fetch(url);
             string body = resp.Content.ReadAsStringAsync().GetAwaiter().GetResult();
             if (!resp.IsSuccessStatusCode)
             {
@@ -160,7 +174,7 @@ namespace NbtCompanion.Core
         public static byte[] Download(string url)
         {
             Log.Write("download " + url);
-            using HttpResponseMessage resp = Http.GetAsync(url).GetAwaiter().GetResult();
+            using HttpResponseMessage resp = Fetch(url);
             if (!resp.IsSuccessStatusCode)
             {
                 throw new StepException(L.T("Download non riuscito (", "Download failed (") + (int)resp.StatusCode + "): " + url);

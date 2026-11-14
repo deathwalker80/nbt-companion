@@ -27,33 +27,57 @@ namespace NbtCompanion.UI
 
         private readonly List<Button> _actions = new List<Button>();
         private readonly Dictionary<string, Panel> _pages = new Dictionary<string, Panel>();
-        private readonly List<Button> _navButtons = new List<Button>();
+        private readonly List<NavItem> _navButtons = new List<NavItem>();
         private string _currentPage = "connect";
 
         private Panel _host = null!;
         private RichTextBox _log = null!;
-        private Label _stNet = null!;
-        private Label _stUnit = null!;
-        private Label _stSsh = null!;
-        private Label _stAad = null!;
-        private Label _stLatest = null!;
+        private Chip _stNet = null!;
+        private Chip _stUnit = null!;
+        private Chip _stSsh = null!;
+        private Chip _stAad = null!;
+        private Chip _stLatest = null!;
+        private Chip _stBusy = null!;
+        private BusyBar _busyBar = null!;
 
         public MainForm()
         {
             _settings = Settings.Load();
             L.English = _settings.Language == "en";
-            Text = "NBT Companion " + AppInfo.Version;
+            Text = "NBT Companion " + AppInfo.Version + " by DeathWalkeR";
             BackColor = Theme.Back;
             ForeColor = Theme.Text;
             Font = Theme.Body;
             MinimumSize = new Size(1100, 760);
-            Size = new Size(1240, 860);
+            Size = new Size(1280, 900);
             StartPosition = FormStartPosition.CenterScreen;
             Theme.DarkTitleBar(this);
+            try
+            {
+                if (Environment.ProcessPath != null)
+                {
+                    Icon = Icon.ExtractAssociatedIcon(Environment.ProcessPath);
+                }
+            }
+            catch (Exception)
+            {
+                // default icon
+            }
             Log.Line += OnLogLine;
             BuildUi();
             Log.Write("NBT Companion " + AppInfo.Version + " avviato. Log completo: " + Log.FilePath);
-            Shown += (s, e) => RunTask(L.T("Controllo online di NBT-AAD", "Online check of NBT-AAD"), LoadReleases, false, false);
+            Shown += (s, e) => RunTask(L.T("Controllo online di NBT-AAD e di NBT Companion", "Online check of NBT-AAD and NBT Companion"), () =>
+            {
+                try
+                {
+                    LoadReleases();
+                }
+                catch (StepException ex)
+                {
+                    Log.Write("Elenco di NBT-AAD non disponibile: " + ex.Message.Split('\n')[0]);
+                }
+                CheckSelfUpdate(false);
+            }, false, false);
             FormClosing += (s, e) =>
             {
                 _settings.Save();
@@ -87,29 +111,40 @@ namespace NbtCompanion.UI
             {
                 Dock = DockStyle.Fill,
                 ColumnCount = 2,
-                RowCount = 4,
+                RowCount = 5,
                 BackColor = Theme.Back,
                 Padding = new Padding(0),
             };
-            root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 250));
+            root.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 262));
             root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 36));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 64));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 3));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
             root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 230));
+            root.RowStyles.Add(new RowStyle(SizeType.Absolute, 200));
 
-            // header
-            var header = new Panel { Dock = DockStyle.Fill, BackColor = Theme.Panel };
-            var title = Theme.Label("NBT Companion  " + AppInfo.Version, Theme.Heading);
-            title.Location = new Point(18, 14);
+            // header: icon, name, version, author, subtitle, buttons on the right
+            var header = new Panel { Dock = DockStyle.Fill, BackColor = Theme.Panel, Margin = new Padding(0) };
+            var logo = new PictureBox
+            {
+                Size = new Size(46, 46),
+                Location = new Point(14, 9),
+                SizeMode = PictureBoxSizeMode.Zoom,
+                Image = AppIconImage(),
+            };
+            header.Controls.Add(logo);
+            var title = Theme.Label("NBT Companion", Theme.Heading);
+            title.Location = new Point(68, 9);
             header.Controls.Add(title);
+            var version = Theme.Label(AppInfo.Version + "  by DeathWalkeR", Theme.Small, Theme.Dim);
+            version.Location = new Point(70, 37);
+            header.Controls.Add(version);
             var sub = Theme.Label(L.T("BMW / MINI / Toyota Supra NBT EVO (ID5/ID6) - NBT-AAD via cavo ENET",
                 "BMW / MINI / Toyota Supra NBT EVO (ID5/ID6) - NBT-AAD over the ENET cable"), Theme.Small, Theme.Dim);
-            sub.Location = new Point(330, 22);
+            sub.Location = new Point(68 + Math.Max(title.PreferredWidth, version.PreferredWidth) + 34, 23);
             header.Controls.Add(sub);
             var lang = Theme.Button(L.English ? "Italiano" : "English");
-            lang.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            lang.MinimumSize = new Size(100, 30);
+            lang.MinimumSize = new Size(100, 34);
             lang.Click += (s, e) =>
             {
                 if (_busy)
@@ -119,35 +154,53 @@ namespace NbtCompanion.UI
                 L.English = !L.English;
                 _settings.Language = L.English ? "en" : "it";
                 _settings.Save();
+                string? logRtf = _log.Rtf;
                 BuildUi();
+                if (logRtf != null)
+                {
+                    _log.Rtf = logRtf;
+                }
+                _log.SelectionStart = _log.TextLength;
+                _log.ScrollToCaret();
             };
             header.Controls.Add(lang);
-            header.Resize += (s, e) => lang.Location = new Point(header.Width - lang.Width - 18, 12);
+            var upd = Theme.Button(L.T("Aggiornamenti", "Updates"));
+            upd.MinimumSize = new Size(130, 34);
+            upd.Click += (s, e) => RunTask(L.T("Controllo aggiornamenti di NBT Companion", "NBT Companion update check"), () => CheckSelfUpdate(true), false);
+            header.Controls.Add(upd);
+            _actions.Add(upd);
+            header.Resize += (s, e) =>
+            {
+                lang.Location = new Point(header.Width - lang.Width - 18, 15);
+                upd.Location = new Point(lang.Left - upd.Width - 10, 15);
+            };
             root.Controls.Add(header, 0, 0);
             root.SetColumnSpan(header, 2);
 
-            // state bar
+            _busyBar = new BusyBar { Dock = DockStyle.Fill, Margin = new Padding(0) };
+            root.Controls.Add(_busyBar, 0, 1);
+            root.SetColumnSpan(_busyBar, 2);
+
+            // state chips
             var state = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill,
                 BackColor = Theme.Back,
-                Padding = new Padding(14, 8, 0, 0),
+                Padding = new Padding(16, 10, 0, 0),
                 WrapContents = false,
+                Margin = new Padding(0),
             };
-            _stNet = Theme.Label("", Theme.Small, Theme.Dim);
-            _stUnit = Theme.Label("", Theme.Small, Theme.Dim);
-            _stSsh = Theme.Label("", Theme.Small, Theme.Dim);
-            _stAad = Theme.Label("", Theme.Small, Theme.Dim);
-            _stLatest = Theme.Label("", Theme.Small, Theme.Dim);
-            foreach (Label l in new[] { _stNet, _stUnit, _stSsh, _stAad, _stLatest })
-            {
-                l.Margin = new Padding(0, 0, 26, 0);
-                state.Controls.Add(l);
-            }
-            root.Controls.Add(state, 0, 1);
+            _stNet = new Chip();
+            _stUnit = new Chip();
+            _stSsh = new Chip();
+            _stAad = new Chip();
+            _stLatest = new Chip();
+            _stBusy = new Chip { Visible = false, ForeColor = Theme.Accent };
+            state.Controls.AddRange(new Control[] { _stNet, _stUnit, _stSsh, _stAad, _stLatest, _stBusy });
+            root.Controls.Add(state, 0, 2);
             root.SetColumnSpan(state, 2);
 
-            // navigation
+            // page list
             var nav = new FlowLayoutPanel
             {
                 Dock = DockStyle.Fill,
@@ -155,23 +208,25 @@ namespace NbtCompanion.UI
                 WrapContents = false,
                 BackColor = Theme.Panel,
                 Padding = new Padding(10, 12, 10, 10),
+                Margin = new Padding(0, 0, 0, 0),
             };
-            AddNav(nav, "connect", L.T("1  Collegamento", "1  Connection"));
-            AddNav(nav, "ssh", L.T("2  SSH: apri / chiudi", "2  SSH: open / close"));
-            AddNav(nav, "aad", L.T("3  Android Auto (NBT-AAD)", "3  Android Auto (NBT-AAD)"));
-            AddNav(nav, "menu", L.T("4  Posizione nel menu", "4  Menu position"));
-            AddNav(nav, "tile", L.T("5  Casella nella home", "5  Home screen tile"));
-            AddNav(nav, "look", L.T("6  Grafica ex CarLife", "6  Former CarLife look"));
-            AddNav(nav, "env", "7  nbt-aad.env");
-            AddNav(nav, "diag", L.T("8  Diagnostica", "8  Diagnostics"));
-            root.Controls.Add(nav, 0, 2);
+            AddNav(nav, "connect", "1", L.T("Collegamento", "Connection"));
+            AddNav(nav, "ssh", "2", L.T("SSH: apri / chiudi", "SSH: open / close"));
+            AddNav(nav, "aad", "3", "Android Auto (NBT-AAD)");
+            AddNav(nav, "menu", "4", L.T("Posizione nel menu", "Menu position"));
+            AddNav(nav, "tile", "5", L.T("Casella nella home", "Home screen tile"));
+            AddNav(nav, "look", "6", L.T("Grafica ex CarLife", "Former CarLife look"));
+            AddNav(nav, "env", "7", "nbt-aad.env");
+            AddNav(nav, "diag", "8", L.T("Diagnostica", "Diagnostics"));
+            root.Controls.Add(nav, 0, 3);
 
             // page host
-            _host = new Panel { Dock = DockStyle.Fill, BackColor = Theme.Back, Padding = new Padding(18, 10, 18, 10) };
-            root.Controls.Add(_host, 1, 2);
+            _host = new Panel { Dock = DockStyle.Fill, BackColor = Theme.Back, Padding = new Padding(20, 6, 20, 8), Margin = new Padding(0) };
+            root.Controls.Add(_host, 1, 3);
 
             // log
-            var logBox = new Panel { Dock = DockStyle.Fill, BackColor = Theme.Panel, Padding = new Padding(12, 8, 12, 10) };
+            var logOuter = new Panel { Dock = DockStyle.Fill, BackColor = Theme.Back, Padding = new Padding(16, 6, 16, 14), Margin = new Padding(0) };
+            var logCard = new Card { Dock = DockStyle.Fill, Padding = new Padding(14, 8, 14, 12) };
             _log = new RichTextBox
             {
                 Dock = DockStyle.Fill,
@@ -185,18 +240,26 @@ namespace NbtCompanion.UI
                 DetectUrls = false,
             };
             Theme.DarkScrollBars(_log);
-            var logBar = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 40, BackColor = Theme.Panel, WrapContents = false };
-            logBar.Controls.Add(Theme.Label(L.T("Log completo", "Complete log"), Theme.Bold, Theme.Dim));
+            var logBar = new TableLayoutPanel { Dock = DockStyle.Top, Height = 46, ColumnCount = 2, BackColor = Theme.Panel };
+            logBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+            logBar.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+            var logTitle = Theme.Label(L.T("Log completo", "Complete log"), Theme.Bold, Theme.Dim);
+            logTitle.Anchor = AnchorStyles.Left;
+            logBar.Controls.Add(logTitle, 0, 0);
             var openLog = Theme.Button(L.T("Apri cartella dei log", "Open log folder"));
             openLog.Click += (s, e) => OpenFolder(AppPaths.Logs);
-            logBar.Controls.Add(openLog);
             var clear = Theme.Button(L.T("Pulisci finestra", "Clear window"));
             clear.Click += (s, e) => _log.Clear();
-            logBar.Controls.Add(clear);
-            logBox.Controls.Add(_log);
-            logBox.Controls.Add(logBar);
-            root.Controls.Add(logBox, 0, 3);
-            root.SetColumnSpan(logBox, 2);
+            var logButtons = new FlowLayoutPanel { AutoSize = true, WrapContents = false, BackColor = Theme.Panel, Margin = new Padding(0, 2, 0, 0) };
+            logButtons.Controls.Add(openLog);
+            logButtons.Controls.Add(clear);
+            logBar.Controls.Add(logButtons, 1, 0);
+            var logFrame = new Frame(_log) { Dock = DockStyle.Fill };
+            logCard.Controls.Add(logFrame);
+            logCard.Controls.Add(logBar);
+            logOuter.Controls.Add(logCard);
+            root.Controls.Add(logOuter, 0, 4);
+            root.SetColumnSpan(logOuter, 2);
 
             Controls.Add(root);
 
@@ -213,26 +276,28 @@ namespace NbtCompanion.UI
             ResumeLayout(true);
         }
 
-        private void AddNav(FlowLayoutPanel nav, string key, string text)
+        /// <summary>Logo for the header, from the PNG embedded at build time (Assets/NbtCompanion.png).</summary>
+        private static Image? AppIconImage()
         {
-            var b = new Button
+            using System.IO.Stream? s = typeof(MainForm).Assembly.GetManifestResourceStream("NbtCompanion.png");
+            if (s == null)
+            {
+                return null;
+            }
+            using var src = Image.FromStream(s);
+            return new Bitmap(src);
+        }
+
+        private void AddNav(FlowLayoutPanel nav, string key, string number, string text)
+        {
+            var b = new NavItem
             {
                 Text = text,
+                Number = number,
                 Tag = key,
-                Width = 226,
-                Height = 42,
-                TextAlign = ContentAlignment.MiddleLeft,
-                FlatStyle = FlatStyle.Flat,
-                ForeColor = Theme.Text,
-                BackColor = Theme.Panel,
-                Font = Theme.Bold,
+                Width = 242,
                 Margin = new Padding(0, 0, 0, 4),
-                Padding = new Padding(8, 0, 0, 0),
-                Cursor = Cursors.Hand,
-                UseVisualStyleBackColor = false,
             };
-            b.FlatAppearance.BorderSize = 0;
-            b.FlatAppearance.MouseOverBackColor = Theme.Field;
             b.Click += (s, e) => ShowPage(key);
             nav.Controls.Add(b);
             _navButtons.Add(b);
@@ -243,15 +308,13 @@ namespace NbtCompanion.UI
             _currentPage = key;
             _host.Controls.Clear();
             _host.Controls.Add(_pages[key]);
-            foreach (Button b in _navButtons)
+            foreach (NavItem b in _navButtons)
             {
-                bool on = (string?)b.Tag == key;
-                b.BackColor = on ? Theme.Accent : Theme.Panel;
-                b.FlatAppearance.MouseOverBackColor = on ? Theme.Accent : Theme.Field;
+                b.Selected = (string?)b.Tag == key;
             }
         }
 
-        /// <summary>Page frame: title, description, content (fills), action bar.</summary>
+        /// <summary>Page frame: title, description, content in a card (fills), action bar.</summary>
         private Panel Page(string title, string description, Control content, params Button[] actions)
         {
             var t = new TableLayoutPanel
@@ -264,17 +327,20 @@ namespace NbtCompanion.UI
             t.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             t.RowStyles.Add(new RowStyle(SizeType.AutoSize));
             t.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-            t.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
+            t.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
             var head = Theme.Label(title, Theme.Heading);
-            head.Margin = new Padding(0, 0, 0, 4);
+            head.Margin = new Padding(0, 0, 0, 2);
             t.Controls.Add(head, 0, 0);
             var desc = Theme.Label(description, Theme.Body, Theme.Dim);
-            desc.MaximumSize = new Size(900, 0);
+            desc.MaximumSize = new Size(920, 0);
             desc.Margin = new Padding(0, 0, 0, 10);
             t.Controls.Add(desc, 0, 1);
-            content.Dock = DockStyle.Fill;
-            t.Controls.Add(content, 0, 2);
-            var bar = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Padding = new Padding(0, 10, 0, 0) };
+            var card = new Card { Dock = DockStyle.Fill, Margin = new Padding(0) };
+            Control inner = content is TextBox || content is ListView ? new Frame(content) : content;
+            inner.Dock = DockStyle.Fill;
+            card.Controls.Add(inner);
+            t.Controls.Add(card, 0, 2);
+            var bar = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Padding = new Padding(0, 12, 0, 0), BackColor = Theme.Back };
             foreach (Button b in actions)
             {
                 bar.Controls.Add(b);
@@ -289,7 +355,10 @@ namespace NbtCompanion.UI
         private static FlowLayoutPanel Row(params Control[] controls)
         {
             var f = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 2, 0, 8), Dock = DockStyle.Top };
-            f.Controls.AddRange(controls);
+            foreach (Control c in controls)
+            {
+                f.Controls.Add(c is TextBox ? new Frame(c) { Margin = new Padding(0, 0, 12, 0) } : c);
+            }
             return f;
         }
 
@@ -369,6 +438,9 @@ namespace NbtCompanion.UI
             {
                 b.Enabled = false;
             }
+            _busyBar.Running = true;
+            _stBusy.Text = L.T("In corso: ", "Running: ") + title;
+            _stBusy.Visible = true;
             UseWaitCursor = true;
             Log.Section(title);
             Task.Run(() =>
@@ -396,6 +468,8 @@ namespace NbtCompanion.UI
                     {
                         b.Enabled = true;
                     }
+                    _busyBar.Running = false;
+                    _stBusy.Visible = false;
                     UseWaitCursor = false;
                     RefreshState();
                     if (error != null && popupOnError)
@@ -437,14 +511,14 @@ namespace NbtCompanion.UI
             msg.Location = new Point(20, 18);
             var box = Theme.TextBox();
             box.Width = 220;
-            box.Location = new Point(20, 200);
+            var boxFrame = new Frame(box) { Location = new Point(20, 196) };
             var ok = Theme.Button(L.T("Conferma", "Confirm"), true);
             ok.Location = new Point(20, 245);
             ok.DialogResult = DialogResult.OK;
             var no = Theme.Button(L.T("Annulla", "Cancel"));
             no.Location = new Point(160, 245);
             no.DialogResult = DialogResult.Cancel;
-            f.Controls.AddRange(new Control[] { msg, box, ok, no });
+            f.Controls.AddRange(new Control[] { msg, boxFrame, ok, no });
             f.AcceptButton = ok;
             f.CancelButton = no;
             return f.ShowDialog(this) == DialogResult.OK && box.Text.Trim() == word;
@@ -458,6 +532,47 @@ namespace NbtCompanion.UI
         private T Ui<T>(Func<T> f)
         {
             return InvokeRequired ? (T)Invoke(f) : f();
+        }
+
+        /// <summary>
+        /// Looks for a newer NBT Companion; asks before installing it. Never while an operation on the head unit runs:
+        /// RunTask allows one task at a time and the update is offered only at the end of this one.
+        /// </summary>
+        private void CheckSelfUpdate(bool userAsked)
+        {
+            SelfUpdate.Available? up;
+            try
+            {
+                up = SelfUpdate.Check();
+            }
+            catch (StepException ex)
+            {
+                Log.Write("Controllo aggiornamenti di NBT Companion non riuscito: " + ex.Message.Split('\n')[0]);
+                if (userAsked)
+                {
+                    throw new StepException(L.T("Controllo aggiornamenti non riuscito (repository " + SelfUpdate.Repo + " non raggiungibile o privato).",
+                        "Update check failed (repository " + SelfUpdate.Repo + " not reachable or private)."));
+                }
+                return;
+            }
+            if (up == null)
+            {
+                Log.Write("NBT Companion " + AppInfo.Version + ": nessuna versione piu' nuova pubblicata");
+                return;
+            }
+            Log.Write("NBT Companion " + up.Version + " disponibile (" + up.Release.Published.ToString("yyyy-MM-dd") + ")");
+            bool yes = Ui(() => MessageBox.Show(this,
+                L.T("E' disponibile NBT Companion ", "NBT Companion ") + up.Version + L.T(" (in uso: ", " is available (running: ") + AppInfo.Version + ").\n\n"
+                + (up.Release.Body.Length > 0 ? up.Release.Body + "\n\n" : "")
+                + L.T("Scarico, controllo lo SHA-256 e riavvio il programma aggiornato?", "Download, check the SHA-256 and restart the updated program?"),
+                "NBT Companion", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button1) == DialogResult.Yes);
+            if (!yes)
+            {
+                Log.Write("Aggiornamento rimandato dall'utente");
+                return;
+            }
+            SelfUpdate.Apply(up);
+            BeginInvoke(new Action(Close));
         }
 
         private void LoadReleases()

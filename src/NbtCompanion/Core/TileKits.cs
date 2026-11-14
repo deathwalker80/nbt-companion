@@ -199,9 +199,24 @@ namespace NbtCompanion.Core
             return RunKitScript(hu, kit, "status.sh", "", 60);
         }
 
+        /// <summary>
+        /// Same check as nbt-aa-tile main (commit 55b5fe7, 13/11, not yet in a release): the tile replaces the CarLife
+        /// entry, so a software without common/widget/CarLife.pbw (e.g. BMW F30 NBTevo_L17193I) cannot show it.
+        /// </summary>
+        public static void RequireCarLifeEntry(HeadUnit hu)
+        {
+            CmdResult r = hu.OmapShell("test -f " + HeadUnit.HmiRo + "/common/widget/CarLife.pbw && echo YES", 20);
+            if (!r.Text.Contains("YES"))
+            {
+                throw new StepException(L.T("Questo software della testata non ha la voce CarLife (common/widget/CarLife.pbw): la casella qui non puo' funzionare.",
+                    "This head unit software has no CarLife entry (common/widget/CarLife.pbw): the tile cannot work here."));
+            }
+        }
+
         public static string TileTestRam(HeadUnit hu, Kit kit, string mode)
         {
             Log.Section("nbt-aa-tile: prova in RAM (" + mode + ", 120 s)");
+            RequireCarLifeEntry(hu);
             Upload(hu, kit);
             return RunKitScript(hu, kit, "test-ram.sh", mode, 240);
         }
@@ -209,6 +224,7 @@ namespace NbtCompanion.Core
         public static string TileInstallBoot(HeadUnit hu, Kit kit, string mode)
         {
             Log.Section("nbt-aa-tile: installazione all'avvio (" + mode + ")");
+            RequireCarLifeEntry(hu);
             Upload(hu, kit);
             hu.RemountRw();
             string o = RunKitScript(hu, kit, "install-boot.sh", mode, 120);

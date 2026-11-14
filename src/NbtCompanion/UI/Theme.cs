@@ -16,6 +16,9 @@ namespace NbtCompanion.UI
         public static readonly Color Dim = Color.FromArgb(154, 164, 178);
         public static readonly Color Accent = Color.FromArgb(45, 127, 249);
         public static readonly Color AccentHover = Color.FromArgb(70, 145, 255);
+        public static readonly Color AccentPressed = Color.FromArgb(30, 100, 210);
+        public static readonly Color AccentDisabled = Color.FromArgb(40, 62, 98);
+        public static readonly Color Hover = Color.FromArgb(33, 39, 47);
         public static readonly Color Good = Color.FromArgb(63, 185, 80);
         public static readonly Color Bad = Color.FromArgb(248, 81, 73);
         public static readonly Color Warn = Color.FromArgb(210, 153, 34);
@@ -85,25 +88,17 @@ namespace NbtCompanion.UI
 
         public static Button Button(string text, bool primary = false)
         {
-            var b = new Button
+            return new RoundButton
             {
                 Text = text,
+                Primary = primary,
                 AutoSize = true,
                 AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                MinimumSize = new Size(120, 34),
-                Padding = new Padding(10, 2, 10, 2),
+                MinimumSize = new Size(120, 36),
+                Padding = new Padding(14, 2, 14, 2),
                 Margin = new Padding(0, 0, 10, 0),
-                FlatStyle = FlatStyle.Flat,
-                BackColor = primary ? Accent : Field,
-                ForeColor = Color.White,
                 Font = Bold,
-                Cursor = Cursors.Hand,
-                UseVisualStyleBackColor = false,
             };
-            b.FlatAppearance.BorderColor = primary ? Accent : Border;
-            b.FlatAppearance.MouseOverBackColor = primary ? AccentHover : Border;
-            b.FlatAppearance.MouseDownBackColor = primary ? Accent : Panel;
-            return b;
         }
 
         public static TextBox TextBox(bool multiline = false, bool mono = false)
@@ -112,7 +107,7 @@ namespace NbtCompanion.UI
             {
                 BackColor = Field,
                 ForeColor = Text,
-                BorderStyle = BorderStyle.FixedSingle,
+                BorderStyle = BorderStyle.None,
                 Font = mono ? Mono : Body,
                 Multiline = multiline,
             };
@@ -190,7 +185,7 @@ namespace NbtCompanion.UI
                 BackColor = Field,
                 ForeColor = Text,
                 Font = Body,
-                BorderStyle = BorderStyle.FixedSingle,
+                BorderStyle = BorderStyle.None,
                 OwnerDraw = true,
                 HeaderStyle = ColumnHeaderStyle.Nonclickable,
             };

@@ -14,12 +14,13 @@
     <Company>DeathWalkeR</Company>
     <Authors>DeathWalkeR</Authors>
     <Copyright>Copyright (c) 2026 DeathWalkeR</Copyright>
-    <Version>1.0.1</Version>
-    <AssemblyVersion>1.0.1.0</AssemblyVersion>
-    <FileVersion>1.0.1.0</FileVersion>
-    <InformationalVersion>1.0.1</InformationalVersion>
+    <Version>1.0.2</Version>
+    <AssemblyVersion>1.0.2.0</AssemblyVersion>
+    <FileVersion>1.0.2.0</FileVersion>
+    <InformationalVersion>1.0.2</InformationalVersion>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
+    <ApplicationIcon>Assets\NbtCompanion.ico</ApplicationIcon>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <SelfContained>true</SelfContained>
     <PublishSingleFile>true</PublishSingleFile>
@@ -28,6 +29,10 @@
     <DebugType>embedded</DebugType>
     <SatelliteResourceLanguages>en;it</SatelliteResourceLanguages>
   </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Assets\NbtCompanion.png" LogicalName="NbtCompanion.png" />
+  </ItemGroup>
 
   <ItemGroup>
     <!-- 2024.2.0 is the last SSH.NET with ssh-dss host keys (needed by some NBT EVO head units; 2026.0.0 has no DSA). -->

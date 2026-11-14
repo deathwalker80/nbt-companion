@@ -60,12 +60,17 @@ namespace NbtCompanion.UI
         /// <summary>Rows of a page: height 0 = as tall as the content, otherwise a share of the free height.</summary>
         private static TableLayoutPanel Grid(params (Control control, float share)[] rows)
         {
-            var t = new TableLayoutPanel { ColumnCount = 1, RowCount = rows.Length, BackColor = Theme.Back };
+            var t = new TableLayoutPanel { ColumnCount = 1, RowCount = rows.Length, BackColor = Theme.Panel };
             for (int i = 0; i < rows.Length; i++)
             {
                 t.RowStyles.Add(rows[i].share <= 0 ? new RowStyle(SizeType.AutoSize) : new RowStyle(SizeType.Percent, rows[i].share));
-                rows[i].control.Dock = DockStyle.Fill;
-                t.Controls.Add(rows[i].control, 0, i);
+                Control c = rows[i].control is TextBox || rows[i].control is ListView ? new Frame(rows[i].control) : rows[i].control;
+                c.Dock = DockStyle.Fill;
+                if (c is Frame)
+                {
+                    c.Margin = new Padding(0, 2, 0, 8);
+                }
+                t.Controls.Add(c, 0, i);
             }
             return t;
         }
@@ -77,11 +82,20 @@ namespace NbtCompanion.UI
             return b;
         }
 
+        /// <summary>Label of a form row, vertically centred on its field, bold.</summary>
+        private static Label FormLabel(string text)
+        {
+            Label l = Theme.Label(text, Theme.Bold, Theme.Dim);
+            l.Anchor = AnchorStyles.Left;
+            l.Margin = new Padding(0, 0, 18, 8);
+            return l;
+        }
+
         private static TextBox Output()
         {
             TextBox t = Theme.TextBox(true, true);
             t.ReadOnly = true;
-            t.BackColor = Theme.Panel;
+            t.BackColor = Theme.Back;
             return t;
         }
 
@@ -91,22 +105,22 @@ namespace NbtCompanion.UI
         {
             _tHost = Theme.TextBox();
             _tHost.Width = 220;
-            _tHost.Text = _settings.Host;
+            _tHost.Text = _settings.Host.Length > 0 ? _settings.Host : DiagNet.DefaultHosts[0];
             _tPassword = Theme.TextBox();
             _tPassword.Width = 220;
             _tPassword.UseSystemPasswordChar = true;
-            _tPassword.Text = _password;
+            _tPassword.Text = _password.Length > 0 ? _password : HeadUnit.DefaultPassword;
             _connectInfo = Output();
 
-            var form = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, BackColor = Theme.Back };
+            var form = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, BackColor = Theme.Panel };
             form.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             form.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            form.Controls.Add(Theme.Label(L.T("Indirizzo SSH", "SSH address")), 0, 0);
-            form.Controls.Add(Row(_tHost, Theme.Label(L.T("vuoto = automatico (annuncio HSFZ, poi 169.254.199.99 e 169.254.199.119)",
-                "empty = automatic (HSFZ announcement, then 169.254.199.99 and 169.254.199.119)"), Theme.Small, Theme.Dim)), 1, 0);
-            form.Controls.Add(Theme.Label(L.T("Password root", "root password")), 0, 1);
-            form.Controls.Add(Row(_tPassword, Theme.Label(L.T("chiesta a te, mai salvata: resta in memoria finche' l'app e' aperta",
-                "asked to you, never saved: it stays in memory while the app is open"), Theme.Small, Theme.Dim)), 1, 1);
+            form.Controls.Add(FormLabel(L.T("Indirizzo SSH", "SSH address")), 0, 0);
+            form.Controls.Add(Row(_tHost, Theme.Label(L.T("predefinito, modificabile; se non risponde: annuncio HSFZ e 169.254.199.119",
+                "default, editable; if it does not answer: HSFZ announcement and 169.254.199.119"), Theme.Small, Theme.Dim)), 1, 0);
+            form.Controls.Add(FormLabel(L.T("Password root", "root password")), 0, 1);
+            form.Controls.Add(Row(_tPassword, Theme.Label(L.T("predefinita ID5/ID6, modificabile; mai salvata ne' scritta nei log",
+                "ID5/ID6 default, editable; never saved nor written to the logs"), Theme.Small, Theme.Dim)), 1, 1);
 
             Control content = Grid((form, 0), (Theme.Label(L.T("Esito", "Result"), Theme.Bold, Theme.Dim), 0), (_connectInfo, 100));
             return Page(L.T("Collegamento", "Connection"),
@@ -727,14 +741,14 @@ namespace NbtCompanion.UI
             _lookList.Columns.Add(L.T("Misura", "Size"), 110);
             _lookList.Columns.Add(L.T("Tipo colore", "Colour type"), 110);
             _lookOut = Output();
-            var form = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, BackColor = Theme.Back };
+            var form = new TableLayoutPanel { ColumnCount = 2, AutoSize = true, BackColor = Theme.Panel };
             form.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             form.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-            form.Controls.Add(Theme.Label(L.T("Marca (testi dell'HMI)", "Brand (HMI texts)")), 0, 0);
+            form.Controls.Add(FormLabel(L.T("Marca (testi dell'HMI)", "Brand (HMI texts)")), 0, 0);
             form.Controls.Add(Row(_cbBrand, Theme.Label(L.T("mini, bmw, bmwm (menu con testi M), bmwi", "mini, bmw, bmwm (menu with M texts), bmwi"), Theme.Small, Theme.Dim)), 1, 0);
-            form.Controls.Add(Theme.Label(L.T("Testo della voce", "Entry text")), 0, 1);
+            form.Controls.Add(FormLabel(L.T("Testo della voce", "Entry text")), 0, 1);
             form.Controls.Add(Row(_tLabel, Theme.Label(L.T("al posto di \"n. t. a. (ASIA)\" / \"CarLife\", in tutte le lingue", "instead of \"n. t. a. (ASIA)\" / \"CarLife\", in every language"), Theme.Small, Theme.Dim)), 1, 1);
-            form.Controls.Add(Theme.Label(L.T("Immagini", "Images")), 0, 2);
+            form.Controls.Add(FormLabel(L.T("Immagini", "Images")), 0, 2);
             form.Controls.Add(Row(_tImages, browse, noImages), 1, 2);
             Control content = Grid((form, 0), (_lookList, 50), (_lookOut, 50));
             FillLookList();

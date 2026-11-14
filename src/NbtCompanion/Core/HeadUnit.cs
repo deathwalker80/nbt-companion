@@ -48,6 +48,8 @@ namespace NbtCompanion.Core
         public const string AaDir = "/opt/aa";
         public const string PluginDir = "/opt/hmi/ID5/data/ro/Plugins/NbtAad";
         public const string HmiRo = "/opt/hmi/ID5/data/ro";
+        /// <summary>Default root password of NBT EVO ID5/ID6 head units, pre-filled in the connection page (editable).</summary>
+        public const string DefaultPassword = "ts&SK412";
 
         private enum WriteWay { None, DirectQnet, ViaJacinto, OnStdin }
         private enum ReadWay { None, OnCat, DirectQnet }

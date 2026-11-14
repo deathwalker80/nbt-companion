@@ -5,14 +5,14 @@ units: it connects to the car over the ENET cable, opens SSH if it is closed, in
 [NBT-AAD](https://github.com/Sq00ky/Supra-iDrive6-Android-Auto) (native Android Auto by Sq00ky / nanaisu) with a few
 options, and can close SSH again at the end. No PuTTY, no USB stick.
 
-**Status: 1.0.1, not tested in a car yet.** The transfer layer and every head-unit script were run against a simulated
+**Status: 1.0.2, not tested in a car yet.** The transfer layer and every head-unit script were run against a simulated
 unit (OpenSSH + the same shell scripts); the first car tests are on a MINI F60 (`NBTevo_Y21432J`).
 
 ## What it does
 
 | Page | |
 |---|---|
-| 1 Connection | Finds the head unit on the diagnostic network (HSFZ announcement, UDP 6811) and reads the VIN, checks SSH port 22, logs in as `root` (password asked every time, never saved) and runs a transfer self-test: a test file with all 256 byte values is written to hu-omap's RAM and read back. |
+| 1 Connection | Finds the head unit on the diagnostic network (HSFZ announcement, UDP 6811) and reads the VIN, checks SSH port 22, logs in as `root` (address and ID5/ID6 default password pre-filled and editable; the password is never saved) and runs a transfer self-test: a test file with all 256 byte values is written to hu-omap's RAM and read back. |
 | 2 SSH | Opens SSH when it is closed and closes it again (see below). |
 | 3 Android Auto (NBT-AAD) | Lists releases **and pre-releases** (sorted by date, with notes), downloads `nbt-aad` + `Releases.zip`, checks GitHub's SHA-256, ARM/QNX ELF, the 5 plugin files, free space, and that the new binary starts on the unit (`--license`) before anything is changed. Update as in Sq00ky's guide: stop nbt-aad, `nbt-aad` -> `nbt-aad.old`, plugin folder -> `/opt/aa/NbtAad.old` (never inside `Plugins`), copy the new one, read back every file (SHA-256), firewall rule with the built-in `--pf-check` / `--pf-install`. Keeps 1 or 2 versions. One-click restore of the previous version (swap). `nbt-aad.env` is not touched. |
 | 4 Menu position | Moves the "Android Auto" and "Open Android Auto" entries between Media/Radio (`insertStateID="20"`) and MINI Connected / ConnectedDrive (`"50"`; checked on MINI, not checked on BMW). Done automatically at every update if the option is on. |
@@ -23,6 +23,11 @@ unit (OpenSSH + the same shell scripts); the first car tests are on a MINI F60 (
 
 Colour icons of the Android Auto entry (`NbtAad_ALL_Images.zip`) are kept at every update: the ones of the plugin on
 the unit, else the copy kept on the PC, else a file you choose.
+
+**Self-update:** at start (and with the "Updates" button) the app looks at the releases of this repository
+(no pre-releases). A release must have the asset `NBT-Companion.exe`: the app checks GitHub's SHA-256 and the version
+inside the exe, renames itself to `NBT-Companion.exe.old`, puts the new exe in its place and restarts. It asks before
+updating. It works only while the repository is public.
 
 Every operation is written to a complete log (`%LOCALAPPDATA%\NBT-Companion\logs`). The password never reaches it.
 The app never reboots the head unit: reboot by hand (power button 30 s).
@@ -75,4 +80,4 @@ Not affiliated with or endorsed by BMW, MINI, Toyota, Google, Sq00ky or Xayanix.
 App Windows unica per le NBT EVO: collegamento via cavo ENET, apertura/chiusura SSH (script di Xayanix scaricato sul
 PC, non incluso), installazione/aggiornamento/ripristino di NBT-AAD con controlli prima di scrivere, voci in MINI
 Connected / ConnectedDrive, casella nella home, grafica ex CarLife, `nbt-aad.env`, diagnostica. Interfaccia in
-italiano e inglese. Password chiesta ogni volta, mai salvata. Riavvio della testata sempre a mano.
+italiano e inglese. Indirizzo e password predefiniti ID5/ID6 gia' inseriti e modificabili; password mai salvata. Si aggiorna da solo dalle release di GitHub (chiede prima). Riavvio della testata sempre a mano.
