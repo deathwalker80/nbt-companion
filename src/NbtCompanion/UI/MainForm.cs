@@ -169,7 +169,11 @@ namespace NbtCompanion.UI
             header.Controls.Add(lang);
             var upd = Theme.Button(L.T("Aggiornamenti", "Updates"));
             upd.MinimumSize = new Size(130, 34);
-            upd.Click += (s, e) => RunTask(L.T("Controllo aggiornamenti di NBT Companion", "NBT Companion update check"), () => CheckSelfUpdate(true), false);
+            upd.Click += (s, e) =>
+            {
+                ShowPage("upd");
+                RunTask(L.T("Controllo degli aggiornamenti", "Update check"), CheckAllUpdates, false);
+            };
             header.Controls.Add(upd);
             _actions.Add(upd);
             header.Resize += (s, e) =>
@@ -222,6 +226,7 @@ namespace NbtCompanion.UI
             AddNav(nav, "env", "7", "nbt-aad.env");
             AddNav(nav, "diag", "8", L.T("Diagnostica", "Diagnostics"));
             AddNav(nav, "plus", "9", L.T("App NBT Plus", "NBT Plus apps"));
+            AddNav(nav, "upd", "10", L.T("Aggiornamenti", "Updates"));
             root.Controls.Add(nav, 0, 3);
 
             // page host
@@ -264,6 +269,7 @@ namespace NbtCompanion.UI
             _pages["env"] = PageEnv();
             _pages["diag"] = PageDiag();
             _pages["plus"] = PagePlus();
+            _pages["upd"] = PageUpdates();
             ShowPage(_currentPage);
             RefreshState();
             ResumeLayout(true);
@@ -310,6 +316,16 @@ namespace NbtCompanion.UI
         /// <summary>Page frame: title, description, content in a card (fills), action bar.</summary>
         private Panel Page(string title, string description, Control content, params Button[] actions)
         {
+            return Page(null, Theme.Text, title, description, content, actions);
+        }
+
+        /// <summary>Status of DeathWalkeR's programs next to the page title: tested (NBT Plus) or under development.</summary>
+        private static string Tested => L.T("Testato", "Tested");
+
+        private static string UnderDevelopment => L.T("In sviluppo", "Under development");
+
+        private Panel Page(string? status, Color statusColor, string title, string description, Control content, params Button[] actions)
+        {
             var t = new TableLayoutPanel
             {
                 Dock = DockStyle.Fill,
@@ -323,7 +339,18 @@ namespace NbtCompanion.UI
             t.RowStyles.Add(new RowStyle(SizeType.Absolute, 56));
             var head = Theme.Label(title, Theme.Heading);
             head.Margin = new Padding(0, 0, 0, 2);
-            t.Controls.Add(head, 0, 0);
+            if (status == null)
+            {
+                t.Controls.Add(head, 0, 0);
+            }
+            else
+            {
+                var line = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0), BackColor = Theme.Back };
+                head.Margin = new Padding(0, 0, 12, 2);
+                line.Controls.Add(head);
+                line.Controls.Add(new Chip { Text = status, ForeColor = statusColor, Margin = new Padding(0, 2, 0, 0) });
+                t.Controls.Add(line, 0, 0);
+            }
             var desc = Theme.Label(description, Theme.Body, Theme.Dim);
             desc.MaximumSize = new Size(920, 0);
             desc.Margin = new Padding(0, 0, 0, 10);
@@ -416,6 +443,8 @@ namespace NbtCompanion.UI
         }
 
         /// <summary>Runs work off the UI thread; buttons are disabled until it ends; errors are written in clear.</summary>
+        private Action? _afterTask;
+
         private void RunTask(string title, Action work, bool needsUnit = true, bool popupOnError = true)
         {
             if (_busy)
@@ -427,6 +456,9 @@ namespace NbtCompanion.UI
                 Warn(L.T("Prima collega la testata (pagina 1).", "Connect the head unit first (page 1)."));
                 return;
             }
+            // follow-up requested by the caller (the update page re-checks after an update), only once and only if all went well
+            Action? after = _afterTask;
+            _afterTask = null;
             _busy = true;
             foreach (Button b in _actions)
             {
@@ -469,6 +501,10 @@ namespace NbtCompanion.UI
                     if (error != null && popupOnError)
                     {
                         MessageBox.Show(this, error, title, MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    }
+                    if (error == null && after != null)
+                    {
+                        after();
                     }
                 }));
             });

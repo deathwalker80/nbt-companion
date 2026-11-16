@@ -183,8 +183,8 @@ namespace NbtCompanion.UI
                 g.FillEllipse(b, circle);
                 g.DrawEllipse(pen, circle);
             }
-            TextRenderer.DrawText(g, Number, Theme.Bold, circle, _selected ? Color.White : Theme.Dim,
-                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine);
+            TextRenderer.DrawText(g, Number, Number.Length > 1 ? Theme.Small : Theme.Bold, circle, _selected ? Color.White : Theme.Dim,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.SingleLine | TextFormatFlags.NoPadding);
             TextRenderer.DrawText(g, Text, Theme.Bold, new Rectangle(50, 0, Width - 54, Height), _selected ? Color.White : Theme.Text,
                 TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.SingleLine | TextFormatFlags.EndEllipsis);
         }

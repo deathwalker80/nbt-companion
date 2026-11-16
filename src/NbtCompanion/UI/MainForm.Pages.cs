@@ -547,6 +547,12 @@ namespace NbtCompanion.UI
                 Warn(L.T("Seleziona una versione nell'elenco.", "Select a version in the list."));
                 return;
             }
+            InstallRelease(rel);
+        }
+
+        /// <summary>Install of one NBT-AAD release with the options of page 3 (also used by the update page).</summary>
+        private void InstallRelease(GhRelease rel)
+        {
             GhAsset? daemon = rel.Asset("nbt-aad");
             GhAsset? zip = rel.Asset("Releases.zip") ?? rel.Asset("release.zip");
             if (daemon == null || zip == null)
@@ -655,7 +661,7 @@ namespace NbtCompanion.UI
                 "disables itself after a crash or 3 failed starts. Works for MINI and BMW (the tile does not change graphics: texts and images are on page 6)."), Theme.Body, Theme.Dim);
             notes.MaximumSize = new Size(880, 0);
             Control content = Grid((Row(_rFollow, _rAlways), 0), (notes, 0), (_tileOut, 100));
-            return Page(L.T("Casella Android Auto nella home (nbt-aa-tile)", "Android Auto tile on the home screen (nbt-aa-tile)"),
+            return Page(UnderDevelopment, Theme.Warn, L.T("Casella Android Auto nella home (nbt-aa-tile)", "Android Auto tile on the home screen (nbt-aa-tile)"),
                 L.T("Per la prova in RAM: Android Auto avviato e telefono collegato, poi guarda il menu principale per 120 s.",
                     "For the RAM test: Android Auto started and phone connected, then watch the main menu for 120 s."),
                 content,
@@ -754,7 +760,7 @@ namespace NbtCompanion.UI
             form.Controls.Add(Row(_tImages, browse, noImages), 1, 2);
             Control content = Grid((form, 0), (_lookList, 50), (_lookOut, 50));
             FillLookList();
-            return Page(L.T("Grafica della voce ex CarLife (aa-menu-look)", "Look of the former CarLife entry (aa-menu-look)"),
+            return Page(UnderDevelopment, Theme.Warn, L.T("Grafica della voce ex CarLife (aa-menu-look)", "Look of the former CarLife entry (aa-menu-look)"),
                 L.T("Testi \"Android Auto\" e, se le indichi, le tue immagini PNG al posto di quelle CarLife (stessa larghezza e altezza dell'originale). " +
                     "Ogni file originale viene salvato una sola volta in /opt/aa/menu-look-backup; \"Ripristina originali\" li rimette tutti. Riavvio a mano.",
                     "\"Android Auto\" texts and, if you give them, your PNG images instead of the CarLife ones (same width and height as the original). " +
@@ -930,7 +936,7 @@ namespace NbtCompanion.UI
             notes.MaximumSize = new Size(880, 0);
             Control content = Grid((form, 0), (notes, 0), (_plusOut, 100));
             UpdatePlusLabels();
-            return Page(L.T("App NBT Plus (iDrive Plus)", "NBT Plus apps (iDrive Plus)"),
+            return Page(Tested, Theme.Good, L.T("App NBT Plus (iDrive Plus)", "NBT Plus apps (iDrive Plus)"),
                 L.T("App del telefono e plugin dell'iDrive di NBT Plus / MINI Plus / BMW Plus / Supra Plus.",
                     "Phone app and iDrive plugins of NBT Plus / MINI Plus / BMW Plus / Supra Plus."),
                 content,
@@ -1036,6 +1042,329 @@ namespace NbtCompanion.UI
                 string o = NbtPlus.Remove(_hu!, _plusKit);
                 Ui(() => _plusOut.Text = o.Replace("\r\n", "\n").Replace("\n", "\r\n"));
             });
+        }
+
+        // ================================================================== 10. updates
+
+        private sealed class UpdateRow
+        {
+            public string Key { get; set; } = "";
+            public string Name { get; set; } = "";
+            public string Author { get; set; } = "";
+            public string Status { get; set; } = "";
+            public string Installed { get; set; } = "";
+            public string Available { get; set; } = "";
+            public string Result { get; set; } = "";
+            public bool NeedsUpdate { get; set; }
+            /// <summary>Found on the head unit at the last check (only what is installed is updated from this page).</summary>
+            public bool Present { get; set; }
+            /// <summary>Page where it is installed the first time.</summary>
+            public string InstallPage { get; set; } = "";
+            public GhRelease? Release { get; set; }
+        }
+
+        private ListView _updList = null!;
+        private readonly List<UpdateRow> _updRows = new List<UpdateRow>();
+
+        private Panel PageUpdates()
+        {
+            _updList = Theme.List();
+            _updList.Columns.Add(L.T("Programma", "Program"), 180);
+            _updList.Columns.Add(L.T("Autore", "Author"), 125);
+            _updList.Columns.Add(L.T("Stato", "Status"), 130);
+            _updList.Columns.Add(L.T("Installato", "Installed"), 175);
+            _updList.Columns.Add(L.T("Disponibile", "Available"), 175);
+            _updList.Columns.Add(L.T("Esito", "Result"), 150);
+            var notes = Theme.Label(L.T(
+                "\"Controlla tutto\" confronta quello che c'e' sulla testata collegata (letto e confrontato con lo SHA-256) con le ultime release su GitHub. " +
+                "Testato = provato in auto e distribuito; In sviluppo = pubblicato ma ancora in prova; i programmi in sviluppo non ancora provati (MINI Sport) sono solo elencati, non installabili. " +
+                "L'app sul telefono non si legge da qui: viene indicata solo l'ultima disponibile.",
+                "\"Check all\" compares what is on the connected head unit (read and compared by SHA-256) with the latest releases on GitHub. " +
+                "Tested = tried in a car and distributed; Under development = published but still being tried; programs under development not tried yet (MINI Sport) are only listed, not installable. " +
+                "The phone app cannot be read from here: only the latest available one is shown."), Theme.Body, Theme.Dim);
+            notes.MaximumSize = new Size(900, 0);
+            Control content = Grid((_updList, 100), (notes, 0));
+            FillUpdateList();
+            return Page(L.T("Aggiornamenti", "Updates"),
+                L.T("NBT Companion, NBT-AAD e i programmi di DeathWalkeR: versione installata e ultima uscita.",
+                    "NBT Companion, NBT-AAD and DeathWalkeR's programs: installed version and latest release."),
+                content,
+                Act(L.T("Controlla tutto", "Check all"), () => RunTask(L.T("Controllo degli aggiornamenti", "Update check"), CheckAllUpdates, false), true),
+                Act(L.T("Aggiorna selezionato", "Update selected"), DoUpdateSelected));
+        }
+
+        private void FillUpdateList()
+        {
+            if (_updList == null || _updList.IsDisposed)
+            {
+                return;
+            }
+            string? keep = _updList.SelectedItems.Count == 1 ? (_updList.SelectedItems[0].Tag as UpdateRow)?.Key : null;
+            _updList.BeginUpdate();
+            _updList.Items.Clear();
+            List<UpdateRow> rows = _updRows.Count > 0 ? _updRows : BaseUpdateRows();
+            foreach (UpdateRow r in rows)
+            {
+                var it = new ListViewItem(new[] { r.Name, r.Author, r.Status, r.Installed, r.Available, r.Result })
+                {
+                    Tag = r,
+                    ForeColor = r.NeedsUpdate ? Theme.Warn : r.Key == "minisport" ? Theme.Dim : Theme.Text,
+                };
+                _updList.Items.Add(it);
+                if (r.Key == keep)
+                {
+                    it.Selected = true;
+                }
+            }
+            _updList.EndUpdate();
+        }
+
+        private static List<UpdateRow> BaseUpdateRows()
+        {
+            string notChecked = L.T("non controllato", "not checked");
+            string tested = Tested;
+            string dev = UnderDevelopment;
+            return new List<UpdateRow>
+            {
+                new UpdateRow { Key = "companion", Name = "NBT Companion", Author = "DeathWalkeR", Status = dev, Installed = AppInfo.Version, Available = notChecked },
+                new UpdateRow { Key = "aad", Name = "NBT-AAD (Android Auto)", Author = "Sq00ky / nanaisu", Status = L.T("Di terzi", "Third party"), Installed = notChecked, Available = notChecked, InstallPage = "3" },
+                new UpdateRow { Key = "tile", Name = L.T("Casella home (nbt-aa-tile)", "Home tile (nbt-aa-tile)"), Author = "DeathWalkeR", Status = dev, Installed = notChecked, Available = notChecked, InstallPage = "5" },
+                new UpdateRow { Key = "plugins", Name = L.T("NBT Plus - plugin iDrive", "NBT Plus - iDrive plugins"), Author = "DeathWalkeR", Status = tested, Installed = notChecked, Available = notChecked, InstallPage = "9" },
+                new UpdateRow { Key = "apk", Name = L.T("NBT Plus - app telefono", "NBT Plus - phone app"), Author = "DeathWalkeR", Status = tested, Installed = L.T("sul telefono (non leggibile)", "on the phone (not readable)"), Available = notChecked },
+                new UpdateRow { Key = "minisport", Name = "MINI Sport (nbt-evo-apps)", Author = "DeathWalkeR", Status = dev, Installed = "-", Available = L.T("non distribuito", "not distributed"), Result = L.T("non installabile", "not installable") },
+            };
+        }
+
+        private void CheckAllUpdates()
+        {
+            List<UpdateRow> rows = BaseUpdateRows();
+            bool unit = _hu != null && _hu.Connected;
+            string connect = L.T("collega la testata", "connect the head unit");
+            string upToDate = L.T("aggiornato", "up to date");
+            string toUpdate = L.T("da aggiornare", "update available");
+            string missing = L.T("non installato", "not installed");
+
+            // every row is checked on its own: a failure (GitHub, SSH) is written in that row and the others go on
+            void Guard(string key, Action check)
+            {
+                UpdateRow row = rows.First(r => r.Key == key);
+                try
+                {
+                    check();
+                }
+                catch (Exception ex)
+                {
+                    row.NeedsUpdate = false;
+                    row.Result = L.T("errore: ", "error: ") + ex.Message.Split('\n')[0];
+                    Log.Write("Aggiornamenti - " + row.Name + ": " + ex.Message);
+                }
+            }
+
+            Guard("companion", () =>
+            {
+                UpdateRow comp = rows.First(r => r.Key == "companion");
+                SelfUpdate.Available? up = SelfUpdate.Check();
+                comp.Available = up != null ? up.Version.ToString() : AppInfo.Version;
+                comp.NeedsUpdate = up != null;
+                comp.Result = up != null ? toUpdate : upToDate;
+                comp.Release = up?.Release;
+            });
+
+            Guard("aad", () =>
+            {
+                UpdateRow aad = rows.First(r => r.Key == "aad");
+                aad.Installed = connect;
+                InstalledAad? inst = null;
+                if (unit)
+                {
+                    // the unit first: what is installed is shown even when GitHub can't be reached
+                    inst = AadInstaller.ReadInstalled(_hu!, _releases, ShaToRelease());
+                    _installed = inst;
+                    aad.Installed = inst.Summary();
+                }
+                if (_releases.Count == 0)
+                {
+                    LoadReleases();
+                    if (unit)
+                    {
+                        inst = AadInstaller.ReadInstalled(_hu!, _releases, ShaToRelease());
+                        _installed = inst;
+                        aad.Installed = inst.Summary();
+                    }
+                }
+                GhRelease? rel = _releases.FirstOrDefault(r => !r.Prerelease);
+                GhRelease? pre = _releases.FirstOrDefault();
+                aad.Available = rel != null ? rel.Name + (pre != null && pre != rel ? "  (pre-release: " + pre.Name + ")" : "") : "-";
+                aad.Release = rel;
+                if (inst != null)
+                {
+                    aad.Present = inst.DaemonPresent;
+                    AadUpdate.State st = AadUpdate.Evaluate(_releases, inst.DaemonPresent, inst.DaemonSha);
+                    aad.NeedsUpdate = st == AadUpdate.State.Older;
+                    aad.Result = st switch
+                    {
+                        AadUpdate.State.NotInstalled => missing,
+                        AadUpdate.State.ListUnreadable => L.T("elenco release non leggibile", "release list not readable"),
+                        AadUpdate.State.Unknown => L.T("versione non riconosciuta (pagina 3)", "unknown version (page 3)"),
+                        AadUpdate.State.Older => toUpdate,
+                        AadUpdate.State.NewPreRelease => L.T("nuova pre-release (pagina 3)", "new pre-release (page 3)"),
+                        AadUpdate.State.NewerPreRelease => L.T("pre-release piu' recente", "newer pre-release"),
+                        _ => upToDate,
+                    };
+                }
+            });
+
+            Guard("tile", () =>
+            {
+                UpdateRow tile = rows.First(r => r.Key == "tile");
+                if (!unit)
+                {
+                    tile.Installed = connect;
+                }
+                _tileKit ??= TileKits.FetchTile();
+                tile.Available = _tileKit.ReleaseName;
+                if (unit)
+                {
+                    byte[]? onUnit = _hu!.Download("/opt/aa-tile/aa-tile");
+                    byte[]? launcher = onUnit == null ? null : _hu!.Download("/opt/aa-tile/aa-tile-launcher.sh");
+                    tile.Present = onUnit != null;
+                    tile.Installed = onUnit == null ? L.T("non installata all'avvio", "not installed at boot") : L.T("installata all'avvio", "installed at boot");
+                    tile.NeedsUpdate = onUnit != null && (!onUnit.SequenceEqual(_tileKit.Files["aa-tile"])
+                        || launcher == null || !launcher.SequenceEqual(_tileKit.Files["aa-tile-launcher.sh"]));
+                    tile.Result = onUnit == null ? missing : tile.NeedsUpdate ? toUpdate : upToDate;
+                }
+            });
+
+            Guard("plugins", () =>
+            {
+                UpdateRow plugins = rows.First(r => r.Key == "plugins");
+                if (!unit)
+                {
+                    plugins.Installed = connect;
+                }
+                if (_plusReleases.Count == 0)
+                {
+                    LoadPlusReleases();
+                }
+                NbtPlus.Found? usb = NbtPlus.Usb(_plusReleases);
+                plugins.Available = usb != null ? usb.Asset.Name + " (" + usb.Release.Name + ")" : "-";
+                if (unit && usb != null)
+                {
+                    _plusKit ??= NbtPlus.FetchKit(_plusReleases);
+                    int present = 0;
+                    int same = 0;
+                    foreach (string n in NbtPlus.Plugins)
+                    {
+                        byte[]? lib = _hu!.Download(HeadUnit.HmiRo + "/Plugins/" + n + "/lib" + n + ".so");
+                        if (lib == null)
+                        {
+                            continue;
+                        }
+                        present++;
+                        if (lib.SequenceEqual(_plusKit.Files[n + "/lib" + n + ".so"]))
+                        {
+                            same++;
+                        }
+                    }
+                    plugins.Present = present > 0;
+                    plugins.Installed = present + L.T(" plugin su ", " plugins of ") + NbtPlus.Plugins.Length;
+                    plugins.NeedsUpdate = present > 0 && same < NbtPlus.Plugins.Length;
+                    plugins.Result = present == 0 ? missing : same == NbtPlus.Plugins.Length ? upToDate : toUpdate + " (" + (NbtPlus.Plugins.Length - same) + ")";
+                }
+            });
+
+            Guard("apk", () =>
+            {
+                UpdateRow apk = rows.First(r => r.Key == "apk");
+                if (_plusReleases.Count == 0)
+                {
+                    LoadPlusReleases();
+                }
+                NbtPlus.Found? a = NbtPlus.Apk(_plusReleases, Ui(PlusApp));
+                apk.Available = a != null ? a.Asset.Name : "-";
+                apk.Result = a != null ? L.T("scaricabile", "downloadable") : L.T("non trovata", "not found");
+            });
+
+            foreach (UpdateRow r in rows)
+            {
+                Log.Write("Aggiornamenti - " + r.Name + " | " + L.T("installato: ", "installed: ") + r.Installed + " | " + L.T("disponibile: ", "available: ") + r.Available
+                    + (r.Result.Length > 0 ? " | " + L.T("esito: ", "result: ") + r.Result : ""));
+            }
+            _updRows.Clear();
+            _updRows.AddRange(rows);
+            BeginInvoke(new Action(FillUpdateList));
+        }
+
+        private void DoUpdateSelected()
+        {
+            UpdateRow? r = _updList.SelectedItems.Count == 1 ? _updList.SelectedItems[0].Tag as UpdateRow : null;
+            if (r == null)
+            {
+                Warn(L.T("Seleziona una riga dell'elenco.", "Select a row of the list."));
+                return;
+            }
+            if (r.InstallPage.Length > 0)
+            {
+                // updates only: the first install has its own page, with its own checks and tests
+                if (!r.Present)
+                {
+                    Warn(r.Name + L.T(": non risulta installato sulla testata (premi \"Controlla tutto\" con la testata collegata). La prima installazione si fa dalla pagina ",
+                        ": not found on the head unit (press \"Check all\" with the head unit connected). The first install is done from page ") + r.InstallPage + ".");
+                    return;
+                }
+                if (!r.NeedsUpdate)
+                {
+                    Warn(r.Name + L.T(": niente da aggiornare (" + r.Result + ").", ": nothing to update (" + r.Result + ")."));
+                    return;
+                }
+                _afterTask = () => RunTask(L.T("Nuovo controllo degli aggiornamenti", "Update check again"), CheckAllUpdates, false);
+            }
+            DispatchUpdate(r);
+            _afterTask = null;
+        }
+
+        private void DispatchUpdate(UpdateRow r)
+        {
+            switch (r.Key)
+            {
+                case "companion":
+                    RunTask(L.T("Controllo aggiornamenti di NBT Companion", "NBT Companion update check"), () => CheckSelfUpdate(true), false);
+                    break;
+                case "aad":
+                    if (r.Release == null)
+                    {
+                        Warn(L.T("Premi prima \"Controlla tutto\".", "Press \"Check all\" first."));
+                        return;
+                    }
+                    if (_hu == null || !_hu.Connected)
+                    {
+                        Warn(L.T("Prima collega la testata (pagina 1).", "Connect the head unit first (page 1)."));
+                        return;
+                    }
+                    InstallRelease(r.Release);
+                    break;
+                case "tile":
+                    if (Confirm(L.T("Aggiorno la casella all'avvio con il kit ", "Update the boot tile with kit ") + (_tileKit?.ReleaseName ?? "") + L.T(" (modo attuale mantenuto)?", " (current mode kept)?")))
+                    {
+                        TileRun(L.T("Aggiornamento della casella", "Tile update"), k =>
+                        {
+                            CmdResult m = _hu!.OmapShell("cat /var/opt/aa-tile/mode", 20, null, true);
+                            string mode = m.Text.Trim() == "always" ? "always" : "follow";
+                            return TileKits.TileInstallBoot(_hu!, k, mode);
+                        });
+                    }
+                    break;
+                case "plugins":
+                    DoPlusInstall();
+                    break;
+                case "apk":
+                    DoPlusApk();
+                    break;
+                default:
+                    Warn(L.T("MINI Sport e' in sviluppo e non ancora provato in auto: non installabile da qui.",
+                        "MINI Sport is under development and not tried in a car yet: not installable from here."));
+                    break;
+            }
         }
 
         // ================================================================== state shown on the pages
