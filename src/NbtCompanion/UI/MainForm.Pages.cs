@@ -1108,10 +1108,10 @@ namespace NbtCompanion.UI
             _updList.Columns.Add(L.T("Esito", "Result"), 150);
             var notes = Theme.Label(L.T(
                 "\"Controlla tutto\" confronta quello che c'e' sulla testata collegata (letto e confrontato con lo SHA-256) con le ultime release su GitHub. " +
-                "Testato = provato in auto e distribuito; In sviluppo = pubblicato ma ancora in prova; i programmi in sviluppo non ancora provati (MINI Sport) sono solo elencati, non installabili. " +
+                "Testato = provato in auto e funzionante; In sviluppo = pubblicato ma ancora in prova. Le app NBT EVO (MINI Sport e le prossime) compaiono una per riga dalla release di nbt-evo-apps. " +
                 "L'app sul telefono non si legge da qui: viene indicata solo l'ultima disponibile.",
                 "\"Check all\" compares what is on the connected head unit (read and compared by SHA-256) with the latest releases on GitHub. " +
-                "Tested = tried in a car and distributed; Under development = published but still being tried; programs under development not tried yet (MINI Sport) are only listed, not installable. " +
+                "Tested = tried in a car and working; Under development = published but still being tried. The NBT EVO apps (MINI Sport and the next ones) appear one per row from the nbt-evo-apps release. " +
                 "The phone app cannot be read from here: only the latest available one is shown."), Theme.Body, Theme.Dim);
             notes.MaximumSize = new Size(900, 0);
             Control content = Grid((_updList, 100), (notes, 0));
@@ -1139,7 +1139,7 @@ namespace NbtCompanion.UI
                 var it = new ListViewItem(new[] { r.Name, r.Author, r.Status, r.Installed, r.Available, r.Result })
                 {
                     Tag = r,
-                    ForeColor = r.NeedsUpdate ? Theme.Warn : r.Key == "minisport" ? Theme.Dim : Theme.Text,
+                    ForeColor = r.NeedsUpdate ? Theme.Warn : Theme.Text,
                 };
                 _updList.Items.Add(it);
                 if (r.Key == keep)
@@ -1162,7 +1162,7 @@ namespace NbtCompanion.UI
                 new UpdateRow { Key = "tile", Name = L.T("Casella home (nbt-aa-tile)", "Home tile (nbt-aa-tile)"), Author = "DeathWalkeR", Status = dev, Installed = notChecked, Available = notChecked, InstallPage = "5" },
                 new UpdateRow { Key = "plugins", Name = L.T("NBT Plus - plugin iDrive", "NBT Plus - iDrive plugins"), Author = "DeathWalkeR", Status = tested, Installed = notChecked, Available = notChecked, InstallPage = "9" },
                 new UpdateRow { Key = "apk", Name = L.T("NBT Plus - app telefono", "NBT Plus - phone app"), Author = "DeathWalkeR", Status = tested, Installed = L.T("sul telefono (non leggibile)", "on the phone (not readable)"), Available = notChecked },
-                new UpdateRow { Key = "minisport", Name = "MINI Sport (nbt-evo-apps)", Author = "DeathWalkeR", Status = dev, Installed = "-", Available = L.T("non distribuito", "not distributed"), Result = L.T("non installabile", "not installable") },
+                new UpdateRow { Key = "evo", Name = L.T("App NBT EVO (nbt-evo-apps)", "NBT EVO apps (nbt-evo-apps)"), Author = "DeathWalkeR", Status = "-", Installed = notChecked, Available = notChecked },
             };
         }
 
@@ -1316,6 +1316,43 @@ namespace NbtCompanion.UI
                 apk.Result = a != null ? L.T("scaricabile", "downloadable") : L.T("non trovata", "not found");
             });
 
+            Guard("evo", () =>
+            {
+                UpdateRow evo = rows.First(r => r.Key == "evo");
+                _evoReleases = GitHub.Releases(EvoApps.Repo);
+                EvoApps.Found? f = EvoApps.Latest(_evoReleases);
+                if (f == null)
+                {
+                    _evoKit = null;
+                    evo.Installed = "-";
+                    evo.Available = L.T("nessuna release pubblicata", "no release published");
+                    return;
+                }
+                _evoKit = EvoApps.Fetch(_evoReleases);
+                ReadEvoInstalled();
+                int at = rows.IndexOf(evo);
+                rows.RemoveAt(at);
+                foreach (EvoPackage p in _evoKit.Packages)
+                {
+                    string inst = _evoInstalledRead ? (_evoInstalled.TryGetValue(p.Name, out string? v) ? v : "") : "";
+                    var row = new UpdateRow
+                    {
+                        Key = "evo:" + p.Name,
+                        Name = p.Title + " (nbt-evo-apps)",
+                        Author = "DeathWalkeR",
+                        Status = p.Tested ? Tested : UnderDevelopment,
+                        Available = p.Version + " (" + f.Release.Name + ")",
+                        Installed = !unit ? connect : inst.Length > 0 ? inst : "-",
+                        InstallPage = "10",
+                        Present = inst.Length > 0,
+                        NeedsUpdate = inst.Length > 0 && inst != p.Version,
+                    };
+                    row.Result = !unit ? "" : inst.Length == 0 ? missing : row.NeedsUpdate ? toUpdate : upToDate;
+                    rows.Insert(at++, row);
+                }
+                UiDo(FillEvoList);
+            });
+
             foreach (UpdateRow r in rows)
             {
                 Log.Write("Aggiornamenti - " + r.Name + " | " + L.T("installato: ", "installed: ") + r.Installed + " | " + L.T("disponibile: ", "available: ") + r.Available
@@ -1392,8 +1429,14 @@ namespace NbtCompanion.UI
                     DoPlusApk();
                     break;
                 default:
-                    Warn(L.T("MINI Sport e' in sviluppo e non ancora provato in auto: non installabile da qui.",
-                        "MINI Sport is under development and not tried in a car yet: not installable from here."));
+                    EvoPackage? p = r.Key.StartsWith("evo:", StringComparison.Ordinal) ? _evoKit?.Packages.FirstOrDefault(x => "evo:" + x.Name == r.Key) : null;
+                    if (p == null)
+                    {
+                        Warn(L.T("Niente da installare per questa riga: premi \"Controlla tutto\" (serve una release di nbt-evo-apps con lo zip della chiavetta).",
+                            "Nothing to install for this row: press \"Check all\" (a release of nbt-evo-apps with the stick zip is needed)."));
+                        break;
+                    }
+                    DoEvoInstall(new List<EvoPackage> { p });
                     break;
             }
         }

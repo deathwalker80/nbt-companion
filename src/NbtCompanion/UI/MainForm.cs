@@ -228,7 +228,8 @@ namespace NbtCompanion.UI
             AddNav(nav, "env", "7", "nbt-aad.env");
             AddNav(nav, "diag", "8", L.T("Diagnostica", "Diagnostics"));
             AddNav(nav, "plus", "9", L.T("App NBT Plus", "NBT Plus apps"));
-            AddNav(nav, "upd", "10", L.T("Aggiornamenti", "Updates"));
+            AddNav(nav, "evo", "10", L.T("App NBT EVO", "NBT EVO apps"));
+            AddNav(nav, "upd", "11", L.T("Aggiornamenti", "Updates"));
             root.Controls.Add(nav, 0, 3);
 
             // page host
@@ -271,6 +272,7 @@ namespace NbtCompanion.UI
             _pages["env"] = PageEnv();
             _pages["diag"] = PageDiag();
             _pages["plus"] = PagePlus();
+            _pages["evo"] = PageEvo();
             _pages["upd"] = PageUpdates();
             ShowPage(_currentPage);
             RefreshState();

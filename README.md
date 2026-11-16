@@ -15,7 +15,8 @@ unit (OpenSSH + the same shell scripts); the first car tests are on a MINI F60 (
 | NBT Plus: iDrive plugins and phone apps ([idrive-plus](https://github.com/deathwalker80/idrive-plus)) | DeathWalkeR | **Tested** (tried in a car and distributed) |
 | NBT Companion | DeathWalkeR | Under development |
 | Home screen tile and former CarLife look ([nbt-aa-tile](https://github.com/deathwalker80/nbt-aa-tile)) | DeathWalkeR | Under development |
-| MINI Sport (nbt-evo-apps) | DeathWalkeR | Under development, not tried in a car: listed only, not installable |
+| MINI Sport ([nbt-evo-apps](https://github.com/deathwalker80/nbt-evo-apps)) | DeathWalkeR | **Tested** (MINI F60, 16/11) |
+| The other nbt-evo-apps apps | DeathWalkeR | Under development |
 | NBT-AAD | Sq00ky / nanaisu | Third party |
 
 | Page | |
@@ -29,7 +30,8 @@ unit (OpenSSH + the same shell scripts); the first car tests are on a MINI F60 (
 | 7 nbt-aad.env | Read, edit, write back (previous version saved on the PC). |
 | 8 Diagnostics | Read-only ZIP with logs and state. Never raw device reads. |
 | 9 NBT Plus apps | [iDrive Plus / NBT Plus](https://github.com/deathwalker80/idrive-plus): downloads the phone APK (generic NBT Plus or MINI / BMW / Supra Plus, GitHub SHA-256 checked) and installs or removes the iDrive plugins of the latest `USB_vNN.zip` with its own `00-installa.sh` / `10-togli.sh`, run from hu-omap's RAM. |
-| 10 Updates | One list with NBT Companion, NBT-AAD and DeathWalkeR's programs: what is on the connected unit (compared by SHA-256) against the latest release on GitHub, and "Update selected". Only what is already installed is updated from here (the first install stays on its own page). NBT-AAD: only a known build older than the latest release is offered; a newer pre-release is never taken back, a new pre-release is only signalled (install it from page 3), an unknown build is left alone. After an update the list is checked again. |
+| 10 NBT EVO apps | [nbt-evo-apps](https://github.com/deathwalker80/nbt-evo-apps) (apps that run on the head unit itself, e.g. MINI Sport, and the next ones): reads the latest release with the stick zip (`nbt-evo-apps*.zip`), checks it (GitHub SHA-256, `files.sum` of every package with the POSIX cksum `pkg.sh` uses, QNX ARM libraries), shows every package with its brand, status, version in the release and version installed, and installs / updates / removes / restores it with the stick's own `pkg.sh` run from hu-omap's RAM (`NEA_STICK`). An app for another brand is not installed. "Download zip" saves the release zip for a USB stick. |
+| 11 Updates | One list with NBT Companion, NBT-AAD and DeathWalkeR's programs: what is on the connected unit (compared by SHA-256) against the latest release on GitHub, and "Update selected". Only what is already installed is updated from here (the first install stays on its own page). NBT-AAD: only a known build older than the latest release is offered; a newer pre-release is never taken back, a new pre-release is only signalled (install it from page 3), an unknown build is left alone. After an update the list is checked again. |
 
 Colour icons of the Android Auto entry (`NbtAad_ALL_Images.zip`) are kept at every update: the ones of the plugin on
 the unit, else the copy kept on the PC, else a file you choose.
@@ -96,7 +98,11 @@ Collegamento automatico: col cavo inserito l'app prova da sola la porta 22 sugli
 password predefinita; legge la versione software della testata (quella di Navigazione > Impostazioni > Posizione e
 versione software, es. `NBTevo_Y21432J`) e la marca nell'HMI. Si ferma dopo una password rifiutata o uno "Scollega".
 
-Pagina 10 "Aggiornamenti": NBT Companion, NBT-AAD e i programmi di DeathWalkeR in un unico elenco, con quello che c'e'
-sulla testata (confronto SHA-256) e l'ultima release su GitHub; aggiorna solo cio' che e' gia' installato. Stato:
-**testati** solo NBT Plus (plugin iDrive e app); NBT Companion, casella nella home e grafica ex CarLife **in sviluppo**;
-MINI Sport in sviluppo e non ancora provato in auto, quindi solo elencato e non installabile; NBT-AAD e' di terzi.
+Pagina 10 "App NBT EVO": le app di nbt-evo-apps che girano sulla testata (MINI Sport e le prossime), dall'ultima release
+con lo zip della chiavetta: controllo dello zip, installazione / aggiornamento / rimozione / versione precedente col
+pkg.sh della chiavetta eseguito dalla RAM di hu-omap; "Scarica zip" salva lo zip per la chiavetta USB.
+
+Pagina 11 "Aggiornamenti": NBT Companion, NBT-AAD e i programmi di DeathWalkeR in un unico elenco, con quello che c'e'
+sulla testata (confronto SHA-256 o versione) e l'ultima release su GitHub; aggiorna solo cio' che e' gia' installato.
+Stato: **testati** NBT Plus (plugin iDrive e app) e MINI Sport; NBT Companion, casella nella home, grafica ex CarLife e
+le altre app di nbt-evo-apps **in sviluppo**; NBT-AAD e' di terzi.
