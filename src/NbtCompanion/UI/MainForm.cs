@@ -23,6 +23,7 @@ namespace NbtCompanion.UI
         private bool _sshOpen;
         private List<GhRelease> _releases = new List<GhRelease>();
         private InstalledAad? _installed;
+        private UnitInfo? _unit;
         private bool _busy;
 
         private readonly List<Button> _actions = new List<Button>();
@@ -66,6 +67,7 @@ namespace NbtCompanion.UI
             Log.Line += OnLogLine;
             BuildUi();
             Log.Write("NBT Companion " + AppInfo.Version + " avviato. Log completo: " + Log.FilePath);
+            StartAutoConnect();
             Shown += (s, e) => RunTask(L.T("Controllo online di NBT-AAD e di NBT Companion", "Online check of NBT-AAD and NBT Companion"), () =>
             {
                 try
@@ -420,8 +422,15 @@ namespace NbtCompanion.UI
             List<System.Net.IPAddress> ll = DiagNet.LinkLocalAddresses();
             _stNet.Text = L.T("Rete: ", "Network: ") + (ll.Count > 0 ? string.Join(", ", ll) : L.T("nessun 169.254.x.x", "no 169.254.x.x"));
             _stNet.ForeColor = ll.Count > 0 ? Theme.Good : Theme.Warn;
-            _stUnit.Text = L.T("Testata: ", "Head unit: ") + (_disc != null ? (_disc.Vin.Length > 0 ? _disc.Vin : "?") + " @ " + _disc.Gateway : L.T("non trovata", "not found"));
-            _stUnit.ForeColor = _disc != null ? Theme.Good : Theme.Dim;
+            bool linked = _hu != null && _hu.Connected;
+            string unitText = linked && _unit != null ? _unit.Summary() : "";
+            if (_disc != null && _disc.Vin.Length > 0)
+            {
+                unitText += (unitText.Length > 0 ? "  |  " : "") + L.T("telaio ", "VIN ") + _disc.Vin;
+            }
+            _stUnit.Text = L.T("Testata: ", "Head unit: ") + (unitText.Length > 0 ? unitText : _disc != null ? "? @ " + _disc.Gateway : L.T("non trovata", "not found"));
+            _stUnit.ForeColor = linked && _unit != null && _unit.SwVersion.Length > 0 && !_unit.IsNbtEvo ? Theme.Warn
+                : linked || _disc != null ? Theme.Good : Theme.Dim;
             if (_hu != null && _hu.Connected)
             {
                 _stSsh.Text = "SSH: " + L.T("collegato a ", "connected to ") + _hu.Host;

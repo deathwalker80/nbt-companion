@@ -20,7 +20,7 @@ unit (OpenSSH + the same shell scripts); the first car tests are on a MINI F60 (
 
 | Page | |
 |---|---|
-| 1 Connection | Finds the head unit on the diagnostic network (HSFZ announcement, UDP 6811) and reads the VIN, checks SSH port 22, logs in as `root` (address and ID5/ID6 default password pre-filled and editable; the password is never saved) and runs a transfer self-test: a test file with all 256 byte values is written to hu-omap's RAM and read back. |
+| 1 Connection | Finds the head unit on the diagnostic network (HSFZ announcement, UDP 6811) and reads the VIN, checks SSH port 22, logs in as `root` (address and ID5/ID6 default password pre-filled and editable; the password is never saved) and runs a transfer self-test: a test file with all 256 byte values is written to hu-omap's RAM and read back. Then it reads what the unit is: the software version iDrive shows under Navigation > Settings > Position and software version (`/opt/sys/etc/nbt_version.txt`, e.g. `NBTevo_Y21432J`; a version that does not start with `NBTevo_` is flagged) and the brand in the HMI. **Automatic connection:** with the cable in, the app tries port 22 on the address of page 1, the HSFZ gateway and `169.254.199.99` / `169.254.199.119` every few seconds and connects with the password of page 1; it stops after a refused password or a manual "Disconnect", and starts again with "Connect" or when the cable is plugged in again. |
 | 2 SSH | Opens SSH when it is closed and closes it again (see below). |
 | 3 Android Auto (NBT-AAD) | Lists releases **and pre-releases** (sorted by date, with notes), downloads `nbt-aad` + `Releases.zip`, checks GitHub's SHA-256, ARM/QNX ELF, the 5 plugin files, free space, and that the new binary starts on the unit (`--license`) before anything is changed. Update as in Sq00ky's guide: stop nbt-aad, `nbt-aad` -> `nbt-aad.old`, plugin folder -> `/opt/aa/NbtAad.old` (never inside `Plugins`), copy the new one, read back every file (SHA-256), firewall rule with the built-in `--pf-check` / `--pf-install`. Keeps 1 or 2 versions. One-click restore of the previous version (swap). `nbt-aad.env` is not touched. |
 | 4 Menu position | Moves the "Android Auto" and "Open Android Auto" entries between Media/Radio (`insertStateID="20"`) and MINI Connected / ConnectedDrive (`"50"`; checked on MINI, not checked on BMW). Done automatically at every update if the option is on. |
@@ -91,6 +91,10 @@ App Windows unica per le NBT EVO: collegamento via cavo ENET, apertura/chiusura 
 PC, non incluso), installazione/aggiornamento/ripristino di NBT-AAD con controlli prima di scrivere, voci in MINI
 Connected / ConnectedDrive, casella nella home, grafica ex CarLife, `nbt-aad.env`, diagnostica. Interfaccia in
 italiano e inglese. Indirizzo e password predefiniti ID5/ID6 gia' inseriti e modificabili; password mai salvata. Si aggiorna da solo dalle release di GitHub (chiede prima). Riavvio della testata sempre a mano.
+
+Collegamento automatico: col cavo inserito l'app prova da sola la porta 22 sugli indirizzi standard e si collega con la
+password predefinita; legge la versione software della testata (quella di Navigazione > Impostazioni > Posizione e
+versione software, es. `NBTevo_Y21432J`) e la marca nell'HMI. Si ferma dopo una password rifiutata o uno "Scollega".
 
 Pagina 10 "Aggiornamenti": NBT Companion, NBT-AAD e i programmi di DeathWalkeR in un unico elenco, con quello che c'e'
 sulla testata (confronto SHA-256) e l'ultima release su GitHub; aggiorna solo cio' che e' gia' installato. Stato:

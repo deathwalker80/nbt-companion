@@ -37,6 +37,8 @@ namespace NbtCompanion.Core
 
         private static readonly string[] OmapFiles =
         {
+            "/opt/sys/etc/nbt_version.txt",
+            "/etc/nbt_version.txt",
             "/dev/shmem/nbt-aad.log",
             "/dev/shmem/nbt-aad-app.log",
             "/dev/shmem/nbt-aad-state",

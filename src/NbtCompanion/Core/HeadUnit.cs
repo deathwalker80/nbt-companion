@@ -99,7 +99,7 @@ namespace NbtCompanion.Core
             catch (SshAuthenticationException)
             {
                 client.Dispose();
-                throw new StepException(L.T("Password SSH rifiutata dalla testata.", "SSH password rejected by the head unit."));
+                throw new StepException(L.T("Password SSH rifiutata dalla testata.", "SSH password rejected by the head unit."), true);
             }
             catch (Exception ex)
             {

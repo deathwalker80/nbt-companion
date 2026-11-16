@@ -168,11 +168,22 @@ namespace NbtCompanion.UI
 
         private void DoConnect()
         {
+            // a manual connection also switches the automatic one back on
+            _autoOff = false;
+            ConnectTo(false);
+        }
+
+        /// <summary>Connection with the address and password of page 1; auto = started by the automatic connection.</summary>
+        private void ConnectTo(bool auto)
+        {
             string configured = _tHost.Text.Trim();
             string pw = _tPassword.Text;
-            _settings.Host = configured;
-            _settings.Save();
-            RunTask(L.T("Collegamento", "Connection"), () =>
+            if (!auto)
+            {
+                _settings.Host = configured;
+                _settings.Save();
+            }
+            RunTask(auto ? L.T("Collegamento automatico", "Automatic connection") : L.T("Collegamento", "Connection"), () =>
             {
                 string? host = FindUnit(configured);
                 if (host == null)
@@ -184,10 +195,22 @@ namespace NbtCompanion.UI
                     _hu.Dispose();
                     _hu = null;
                 }
-                _hu = HeadUnit.Connect(host, pw);
+                try
+                {
+                    _hu = HeadUnit.Connect(host, pw);
+                }
+                catch (StepException ex) when (ex.AuthRejected)
+                {
+                    // never retried by itself with a refused password: the user corrects it and presses Connect
+                    _autoOff = true;
+                    throw new StepException(ex.Message + L.T(" Collegamento automatico fermato: correggi la password e premi \"Collega\".",
+                        " Automatic connection stopped: correct the password and press \"Connect\"."));
+                }
                 _password = pw;
+                _unit = null;
                 _hu.TransferSelfTest();
                 List<string> brands = TileKits.DetectBrands(_hu);
+                _unit = UnitInfo.Read(_hu, brands);
                 if (brands.Count == 1)
                 {
                     _settings.Brand = brands[0];
@@ -208,6 +231,11 @@ namespace NbtCompanion.UI
                 string info = Ui(() => _connectInfo.Text)
                     + L.T("Collegato come root a ", "Logged in as root on ") + host + "\r\n"
                     + L.T("Auto-test del trasferimento: superato (", "Transfer self-test: passed (") + _hu.TransferDescription + ")\r\n"
+                    + L.T("Unita': ", "Unit: ") + _unit.Family + "\r\n"
+                    + L.T("Versione software: ", "Software version: ") + (_unit.SwVersion.Length > 0 ? _unit.SwVersion : L.T("non letta (", "not read (") + string.Join(L.T(" e ", " and "), UnitInfo.VersionFiles) + L.T(" assenti o vuoti)", " missing or empty)")) + "\r\n"
+                    + (_unit.SwVersion.Length > 0 && !_unit.IsNbtEvo
+                        ? L.T("ATTENZIONE: non risulta una NBT EVO; questa app e' fatta solo per le NBT EVO ID5/ID6.\r\n", "WARNING: this does not look like an NBT EVO; this app is made for NBT EVO ID5/ID6 only.\r\n")
+                        : "")
                     + L.T("Marca nell'HMI: ", "Brand in the HMI: ") + (brands.Count > 0 ? string.Join(", ", brands) : "-") + "\r\n"
                     + "NBT-AAD: " + _installed.Summary() + "\r\n"
                     + L.T("Versione precedente conservata: ", "Previous version kept: ") + (_installed.OldDaemon ? (_installed.OldBuild.Length > 0 ? _installed.OldBuild : L.T("si", "yes")) : "no") + "\r\n"
@@ -221,7 +249,7 @@ namespace NbtCompanion.UI
                     }
                     return 0;
                 });
-            }, false);
+            }, false, !auto);
         }
 
         private void DoDisconnect()
@@ -231,11 +259,14 @@ namespace NbtCompanion.UI
                 return;
             }
             HeadUnit hu = _hu;
+            // after a manual disconnection the app does not connect again by itself (until "Connect" or a new cable link)
+            _autoOff = true;
             RunTask(L.T("Scollegamento", "Disconnection"), () =>
             {
                 hu.CleanStage();
                 hu.Dispose();
                 _hu = null;
+                _unit = null;
                 Log.Write("Scollegato. File temporanei in /dev/shmem/nbtc rimossi.");
             });
         }

@@ -222,5 +222,13 @@ namespace NbtCompanion.Core
         public StepException(string message) : base(message)
         {
         }
+
+        public StepException(string message, bool authRejected) : base(message)
+        {
+            AuthRejected = authRejected;
+        }
+
+        /// <summary>The head unit refused the SSH password (the automatic connection stops trying).</summary>
+        public bool AuthRejected { get; }
     }
 }
