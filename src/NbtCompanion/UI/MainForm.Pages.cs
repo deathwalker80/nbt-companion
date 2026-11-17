@@ -874,15 +874,15 @@ namespace NbtCompanion.UI
         {
             _envBox = Theme.TextBox(true, true);
             return Page("nbt-aad.env",
-                L.T("Impostazioni di NBT-AAD (/opt/aa/nbt-aad.env), una per riga, NOME=valore (es. NBT_BT_CONN, NBT_TOUCH_OX, NBT_LOG_FILE). " +
+                L.T("Impostazioni di NBT-AAD (/opt/aa/nbt-aad.env, o nella cartella dati del pacchetto se NBT-AAD e' installato con NBTApps), una per riga, NOME=valore (es. NBT_BT_CONN, NBT_TOUCH_OX, NBT_LOG_FILE). " +
                     "Prima di ogni scrittura la versione sulla testata viene salvata sul PC (cartella backup). Vale dal prossimo avvio di Android Auto.",
-                    "NBT-AAD settings (/opt/aa/nbt-aad.env), one per line, NAME=value (e.g. NBT_BT_CONN, NBT_TOUCH_OX, NBT_LOG_FILE). " +
+                    "NBT-AAD settings (/opt/aa/nbt-aad.env, or in the package data folder when NBT-AAD is installed with NBTApps), one per line, NAME=value (e.g. NBT_BT_CONN, NBT_TOUCH_OX, NBT_LOG_FILE). " +
                     "Before every write the head unit's version is saved on the PC (backup folder). Takes effect at the next Android Auto start."),
                 _envBox,
                 Act(L.T("Leggi dalla testata", "Read from the head unit"), () => RunTask(L.T("Lettura di nbt-aad.env", "Reading nbt-aad.env"), () =>
                 {
                     string? env = AadInstaller.ReadEnv(_hu!);
-                    Log.Write(env == null ? "/opt/aa/nbt-aad.env non presente" : "/opt/aa/nbt-aad.env letto (" + env.Length + " caratteri)");
+                    Log.Write(env == null ? "nbt-aad.env non presente" : "nbt-aad.env letto (" + env.Length + " caratteri)");
                     Ui(() => _envBox.Text = (env ?? "").Replace("\n", "\r\n"));
                 })),
                 Act(L.T("Salva sulla testata", "Save to the head unit"), () =>
@@ -1242,6 +1242,12 @@ namespace NbtCompanion.UI
                         AadUpdate.State.NewerPreRelease => L.T("pre-release piu' recente", "newer pre-release"),
                         _ => upToDate,
                     };
+                    if (inst.Package)
+                    {
+                        // NBTApps package: updated from its catalogue, never by hand on top of it (two nbt-aad)
+                        aad.NeedsUpdate = false;
+                        aad.Result = (st == AadUpdate.State.Older ? toUpdate + " - " : "") + L.T("pacchetto NBTApps: dal catalogo", "NBTApps package: from the catalogue");
+                    }
                 }
             });
 

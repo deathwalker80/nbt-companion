@@ -30,7 +30,7 @@ namespace NbtCompanion.Core
             ("omap-pidin.txt", "pidin"),
             ("omap-sloginfo.txt", "sloginfo"),
             ("omap-df.txt", "df -k"),
-            ("omap-ls-aa.txt", "ls -l /opt/aa/ /opt/hmi/ID5/data/ro/Plugins/NbtAad/ /opt/aa-tile/ /var/opt/aa-tile/"),
+            ("omap-ls-aa.txt", "ls -l /opt/aa/ /opt/hmi/ID5/data/ro/Plugins/NbtAad/ /opt/aa-tile/ /var/opt/aa-tile/ /var/opt/aa/ " + AadInstaller.PkgAppDir + "/ " + AadInstaller.PkgDataDir + "/"),
             ("omap-ls-hmi-ro.txt", "ls -l /opt/hmi/ID5/data/ro/"),
             ("omap-mnt.txt", "ls -l /mnt"),
         };
@@ -44,6 +44,7 @@ namespace NbtCompanion.Core
             "/dev/shmem/nbt-aad-state",
             "/dev/shmem/aa-tile.log",
             "/opt/aa/nbt-aad.env",
+            AadInstaller.PkgDataDir + "/nbt-aad.env",
             "/opt/hmi/ID5/data/ro/Plugins/NbtAad/NbtAad.xml",
             "/opt/hmi/ID5/data/ro/Plugins/NbtAad/NbtAad.manifest",
             "/opt/conn/bin/start_webserver.sh",

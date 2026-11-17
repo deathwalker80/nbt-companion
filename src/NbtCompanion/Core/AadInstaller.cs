@@ -21,6 +21,12 @@ namespace NbtCompanion.Core
         public string OldBuild { get; set; } = "";
         public bool EnvPresent { get; set; }
 
+        /// <summary>Installed as an NBTApps package (executable nbt-aad in the package app dir, NBT-AAD #216).</summary>
+        public bool Package { get; set; }
+
+        /// <summary>Package install and also a hand install in /opt/aa: two nbt-aad on the same unit.</summary>
+        public bool HandToo { get; set; }
+
         public string Summary()
         {
             if (!DaemonPresent)
@@ -31,6 +37,14 @@ namespace NbtCompanion.Core
             if (ReleaseName.Length > 0)
             {
                 v += " (" + ReleaseName + ")";
+            }
+            if (Package)
+            {
+                v += L.T(" - pacchetto NBTApps", " - NBTApps package");
+            }
+            if (HandToo)
+            {
+                v += L.T(" + copia a mano in /opt/aa", " + hand copy in /opt/aa");
             }
             return v;
         }
@@ -50,17 +64,58 @@ namespace NbtCompanion.Core
     {
         private const string NewDir = HeadUnit.Stage + "/new";
 
+        /// <summary>
+        /// NBT-AAD #216 (in the releases from v1.9.84): the same build runs as a hand install (/opt/aa, data /var/opt/aa)
+        /// or as an NBTApps package. The daemon decides from its own path, the plugin from an executable nbt-aad in
+        /// the package app dir. Package install: settings file in the data dir, updates from the NBTApps catalogue.
+        /// </summary>
+        public const string PkgAppDir = "/var/opt/nbtapp/apps/com.github.sq00ky.android-auto";
+        public const string PkgDataDir = "/var/opt/nbtapp/data/com.github.sq00ky.android-auto";
+        public const string HandDataDir = "/var/opt/aa";
+
+        /// <summary>True when NBT-AAD is installed as an NBTApps package (executable nbt-aad in its app dir).</summary>
+        public static bool IsPackage(HeadUnit hu)
+        {
+            CmdResult r = hu.OmapShell("if [ -x " + PkgAppDir + "/nbt-aad ]; then echo NBTC-PKG; fi", 30, null, true);
+            return r.Text.Contains("NBTC-PKG");
+        }
+
+        /// <summary>nbt-aad.env: conf dir /opt/aa for a hand install, the package data dir for an NBTApps install.</summary>
+        public static string EnvPath(bool package)
+        {
+            return package ? PkgDataDir + "/nbt-aad.env" : HeadUnit.AaDir + "/nbt-aad.env";
+        }
+
+        private static void RefusePackage(HeadUnit hu)
+        {
+            if (IsPackage(hu))
+            {
+                throw new StepException(L.T(
+                    "NBT-AAD su questa testata e' installato come pacchetto NBTApps (" + PkgAppDir + "): si aggiorna o ripristina dal catalogo NBTApps. " +
+                    "Un'installazione a mano in /opt/aa avrebbe due nbt-aad sulla stessa testata: non la faccio.",
+                    "NBT-AAD on this head unit is installed as an NBTApps package (" + PkgAppDir + "): update or restore it from the NBTApps catalogue. " +
+                    "A hand install in /opt/aa would put two nbt-aad on the same unit: not done."));
+            }
+        }
+
         public static InstalledAad ReadInstalled(HeadUnit hu, IEnumerable<GhRelease>? releases, Dictionary<string, string>? shaToRelease)
         {
             var s = new InstalledAad();
-            hu.OmapShell("ls -l " + HeadUnit.AaDir + "/ " + HeadUnit.PluginDir + "/", 30);
+            hu.OmapShell("ls -l " + HeadUnit.AaDir + "/ " + HeadUnit.PluginDir + "/ " + PkgAppDir + "/", 30);
             CmdResult have = hu.OmapShell("for f in " + HeadUnit.AaDir + "/nbt-aad.old " + HeadUnit.AaDir + "/NbtAad.old " + HeadUnit.AaDir
-                + "/nbt-aad.env; do if [ -e $f ]; then echo HAVE $f; fi; done", 30);
+                + "/nbt-aad.env " + PkgDataDir + "/nbt-aad.env; do if [ -e $f ]; then echo HAVE $f; fi; done; if [ -x " + PkgAppDir + "/nbt-aad ]; then echo HAVE-PKG; fi", 30);
             string text = have.Text;
+            s.Package = text.Contains("HAVE-PKG");
             s.OldDaemon = text.Contains("HAVE " + HeadUnit.AaDir + "/nbt-aad.old");
             s.OldPlugin = text.Contains("HAVE " + HeadUnit.AaDir + "/NbtAad.old");
-            s.EnvPresent = text.Contains("HAVE " + HeadUnit.AaDir + "/nbt-aad.env");
-            byte[]? daemon = hu.Download(HeadUnit.AaDir + "/nbt-aad");
+            s.EnvPresent = text.Contains("HAVE " + EnvPath(s.Package));
+            byte[]? hand = hu.Download(HeadUnit.AaDir + "/nbt-aad");
+            byte[]? daemon = hand;
+            if (s.Package)
+            {
+                daemon = hu.Download(PkgAppDir + "/nbt-aad");
+                s.HandToo = hand != null;
+            }
             if (daemon != null)
             {
                 s.DaemonPresent = true;
@@ -85,6 +140,10 @@ namespace NbtCompanion.Core
                 {
                     s.OldBuild = AadPackage.BuildOf(old);
                 }
+            }
+            if (s.HandToo)
+            {
+                Log.Write("ATTENZIONE: NBT-AAD e' installato sia come pacchetto NBTApps (" + PkgAppDir + ") sia a mano (/opt/aa): due nbt-aad sulla stessa testata");
             }
             Log.Write("Installato: " + s.Summary() + "; precedente conservata: " + (s.OldDaemon ? (s.OldBuild.Length > 0 ? s.OldBuild : "si") : "no")
                 + "; menu: " + string.Join(", ", s.Menu.Select(m => m.Text + " -> " + AadPackage.MenuStateName(m.StateId))));
@@ -163,6 +222,7 @@ namespace NbtCompanion.Core
         public static void Install(HeadUnit hu, AadPackage pkg, InstallOptions opt)
         {
             Log.Section("Installazione NBT-AAD " + pkg.Tag + " (" + pkg.Build + ")");
+            RefusePackage(hu);
 
             // 1. files exactly as they will be on the head unit
             var files = new Dictionary<string, byte[]>(pkg.Plugin);
@@ -304,6 +364,7 @@ namespace NbtCompanion.Core
         public static void RestorePrevious(HeadUnit hu)
         {
             Log.Section("Ripristino della versione precedente di NBT-AAD");
+            RefusePackage(hu);
             hu.RemountRw();
             CmdResult job = hu.RunOmapScript("swap-aad.sh", SwapScript(), "", 120);
             if (!job.Text.Contains("NBTC-RESULT: OK"))
@@ -351,7 +412,9 @@ namespace NbtCompanion.Core
 
         public static string? ReadEnv(HeadUnit hu)
         {
-            byte[]? b = hu.Download(HeadUnit.AaDir + "/nbt-aad.env");
+            string path = EnvPath(IsPackage(hu));
+            Log.Write("nbt-aad.env di questa testata: " + path);
+            byte[]? b = hu.Download(path);
             if (b == null)
             {
                 return null;
@@ -362,22 +425,35 @@ namespace NbtCompanion.Core
 
         public static void WriteEnv(HeadUnit hu, string text)
         {
-            Log.Section("Scrittura di /opt/aa/nbt-aad.env");
+            bool package = IsPackage(hu);
+            string path = EnvPath(package);
+            Log.Section("Scrittura di " + path);
             byte[] data = new UTF8Encoding(false).GetBytes(text.Replace("\r\n", "\n"));
-            byte[]? before = hu.Download(HeadUnit.AaDir + "/nbt-aad.env");
+            byte[]? before = hu.Download(path);
             if (before != null)
             {
                 File.WriteAllBytes(Path.Combine(AppPaths.PcBackup, "nbt-aad.env-" + DateTime.Now.ToString("yyyyMMdd-HHmmss")), before);
             }
             hu.OmapShell("mkdir -p " + HeadUnit.Stage, 20, null, true);
             hu.Upload(data, HeadUnit.Stage + "/nbt-aad.env");
-            hu.RemountRw();
-            CmdResult job = hu.RunOmapScript("env-aad.sh", ReplaceFileScript(HeadUnit.Stage + "/nbt-aad.env", HeadUnit.AaDir + "/nbt-aad.env", data.Length), "", 60);
+            if (package)
+            {
+                CmdResult dir = hu.OmapShell("if [ -d " + PkgDataDir + " ]; then echo NBTC-DIR; fi", 30, null, true);
+                if (!dir.Text.Contains("NBTC-DIR"))
+                {
+                    throw new StepException(L.T("Cartella dati del pacchetto NBTApps assente: ", "NBTApps package data folder missing: ") + PkgDataDir);
+                }
+            }
+            else
+            {
+                hu.RemountRw();
+            }
+            CmdResult job = hu.RunOmapScript("env-aad.sh", ReplaceFileScript(HeadUnit.Stage + "/nbt-aad.env", path, data.Length), "", 60);
             if (!job.Text.Contains("NBTC-RESULT: OK"))
             {
                 throw new StepException(L.T("Scrittura non completata: ", "Write not completed: ") + LastError(job));
             }
-            byte[]? back = hu.Download(HeadUnit.AaDir + "/nbt-aad.env");
+            byte[]? back = hu.Download(path);
             if (back == null || !back.SequenceEqual(data))
             {
                 throw new StepException(L.T("Verifica di nbt-aad.env fallita.", "nbt-aad.env check failed."));
