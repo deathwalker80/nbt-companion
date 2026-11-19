@@ -143,7 +143,7 @@ namespace NbtCompanion.Core
                 throw new StepException(label + L.T(": 00-installa.sh e' diverso da quello previsto (ricerca della chiavetta): non lo uso.",
                     ": 00-installa.sh differs from the expected one (USB stick lookup): not used."));
             }
-            string ram = HeadUnit.Stage + "/" + KitFolder;
+            string ram = HeadUnit.StageToken + "/" + KitFolder;
             script = script.Replace(StickLoop, "U=ram").Replace("/mnt/$U", ram);
             if (script.Split('\n').Any(l => !l.TrimStart().StartsWith("#", StringComparison.Ordinal) && l.Contains("/mnt/")))
             {

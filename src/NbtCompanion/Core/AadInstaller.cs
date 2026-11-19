@@ -62,7 +62,7 @@ namespace NbtCompanion.Core
     /// <summary>Install, update, restore of NBT-AAD on hu-omap. Same steps as Sq00ky's updating.md and 20-installa-aa.sh v3.</summary>
     public static class AadInstaller
     {
-        private const string NewDir = HeadUnit.Stage + "/new";
+        private static string NewDir { get { return HeadUnit.Stage + "/new"; } }
 
         /// <summary>
         /// NBT-AAD #216 (in the releases from v1.9.84): the same build runs as a hand install (/opt/aa, data /var/opt/aa)
@@ -509,7 +509,7 @@ namespace NbtCompanion.Core
             {
                 sb.Append("check $K/Releases/" + f + " " + files[f].Length + "\n");
             }
-            sb.Append("echo \"OK: new files in RAM\"\n");
+            sb.Append("echo \"OK: new files ready\"\n");
             sb.Append("if [ ! -d $A ]; then mkdir /fs/sda0/opt/aa 2>/dev/null; fi\n");
             sb.Append("if [ ! -d $A ]; then fail \"cannot create $A\"; fi\n");
             sb.Append("stop_aad\n");

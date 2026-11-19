@@ -145,7 +145,7 @@ namespace NbtCompanion.Core
                 throw new StepException(label + L.T(": nessun pacchetto in nbt-evo-apps/pacchetti", ": no package in nbt-evo-apps/pacchetti"));
             }
             // wrapper run on omap: the stick folder is the copy in RAM, pkg.sh is the release's one, exit code reported
-            string dir = HeadUnit.Stage + "/" + Folder;
+            string dir = HeadUnit.StageToken + "/" + Folder;
             kit.Files[Wrapper] = Encoding.ASCII.GetBytes(
                 "NEA_STICK=" + dir + "\nexport NEA_STICK\n/bin/sh " + dir + "/pkg.sh \"$@\"\necho \"NBTC-EXIT:$?\"\n");
             Log.Write("Kit " + label + ": " + kit.Files.Count + " file, pacchetti " + string.Join(", ", result.Packages.Select(p => p.Name + " " + p.Version))

@@ -117,7 +117,7 @@ namespace NbtCompanion.Core
                     throw new StepException(label + ": " + f + L.T(" e' diverso da quello previsto (ricerca della chiavetta): non lo uso.",
                         " differs from the expected one (USB stick lookup): not used."));
                 }
-                kit.Files[f] = Encoding.UTF8.GetBytes(text.Replace(stickLoop, "U=" + HeadUnit.Stage));
+                kit.Files[f] = Encoding.UTF8.GetBytes(text.Replace(stickLoop, "U=" + HeadUnit.StageToken));
             }
             Log.Write("Kit " + kit.ReleaseName + ": " + kit.Files.Count + " file, SHA256SUMS verificato");
             return kit;
@@ -163,6 +163,15 @@ namespace NbtCompanion.Core
                 foreach (KeyValuePair<string, byte[]> kv in extra)
                 {
                     all[kv.Key] = kv.Value;
+                }
+            }
+            byte[] token = Encoding.ASCII.GetBytes(HeadUnit.StageToken);
+            foreach (string name in all.Keys.Where(k => k.EndsWith(".sh", StringComparison.Ordinal)).ToList())
+            {
+                // the staging folder is known only after the transfer self-test of the session
+                if (all[name].AsSpan().IndexOf(token) >= 0)
+                {
+                    all[name] = Encoding.UTF8.GetBytes(Encoding.UTF8.GetString(all[name]).Replace(HeadUnit.StageToken, HeadUnit.Stage));
                 }
             }
             var dirs = new SortedSet<string>(StringComparer.Ordinal) { kit.OmapDir };
@@ -330,14 +339,62 @@ namespace NbtCompanion.Core
         public static string LookList(HeadUnit hu, Kit kit, string brand)
         {
             Log.Section("aa-menu-look: immagini CarLife della testata (" + brand + ")");
+            TextDbInfo(hu);
             Upload(hu, kit);
             return RunKitScript(hu, kit, "list-images.sh", brand, 120);
         }
 
-        public static string LookInstall(HeadUnit hu, Kit kit, string brand, string label, string imagesFolder)
+        /// <summary>
+        /// READ ONLY. Whether the CarLife entry is brought up on this head unit: the tile's boot hook in
+        /// start_webserver.sh (nbt-aa-tile, or the older casella-aa) or the tile program running now. aa-menu-look only
+        /// renames that entry; without the tile the entry is not shown (19/11, BMW: texts changed, nothing visible).
+        /// An nbt-aad build that brings up the tile by itself cannot be recognised here. Empty string: nothing found.
+        /// </summary>
+        public static string TilePresence(HeadUnit hu)
+        {
+            CmdResult r = hu.OmapShell("W=/opt/conn/bin/start_webserver.sh; "
+                + "if grep \"nbt-aa-tile hook\" $W >/dev/null 2>&1; then echo HOOK-TILE; fi; "
+                + "if grep \"casella-aa hook\" $W >/dev/null 2>&1; then echo HOOK-OLD; fi; "
+                + "if pidin 2>/dev/null | grep aa-tile/aa-tile | grep -v grep >/dev/null; then echo RUN-TILE; fi; echo CHECK-DONE", 30);
+            if (!r.Text.Contains("CHECK-DONE"))
+            {
+                throw new StepException(L.T("Controllo della casella non riuscito (vedi log): non cambio nulla.", "Tile check failed (see the log): nothing changed."));
+            }
+            var found = new List<string>();
+            if (r.Text.Contains("HOOK-TILE"))
+            {
+                found.Add(L.T("nbt-aa-tile installata all'avvio", "nbt-aa-tile installed at boot"));
+            }
+            if (r.Text.Contains("HOOK-OLD"))
+            {
+                found.Add(L.T("casella-aa (vecchia) installata all'avvio", "casella-aa (old) installed at boot"));
+            }
+            if (r.Text.Contains("RUN-TILE"))
+            {
+                found.Add(L.T("casella in funzione adesso", "tile running now"));
+            }
+            string s = string.Join(", ", found);
+            Log.Write(L.T("Casella Android Auto: ", "Android Auto tile: ") + (s.Length > 0 ? s : L.T("non installata e non in funzione", "not installed and not running")));
+            return s;
+        }
+
+        /// <summary>
+        /// READ ONLY. Logs /dev/shmem/version_textdb.txt, the head unit's own note about its text database, to find
+        /// out which brand texts (bmw / bmwm / mini) the menu uses. Not used to choose: its format is not verified yet.
+        /// </summary>
+        public static void TextDbInfo(HeadUnit hu)
+        {
+            CmdResult r = hu.OmapShell("if [ -f /dev/shmem/version_textdb.txt ]; then cat /dev/shmem/version_textdb.txt; else echo NO-FILE; fi", 20, null, true);
+            string t = r.Text.Trim();
+            Log.Write("/dev/shmem/version_textdb.txt: " + (t == "NO-FILE" || t.Length == 0 ? L.T("non presente", "not present")
+                : t.Replace("\r", "").Replace("\n", " | ")) + L.T(" (solo informativo: dice quali testi usa il menu, da confermare)", " (information only: which texts the menu uses, to be confirmed)"));
+        }
+
+        public static string LookInstall(HeadUnit hu, Kit kit, string brand, string label, string imagesFolder, string tilePresence)
         {
             Log.Section("aa-menu-look: testi e immagini (" + brand + ")");
             string l = CheckLabel(label);
+            TextDbInfo(hu);
             Dictionary<string, byte[]> images = CollectImages(imagesFolder, brand);
             Log.Write("Immagini da inviare: " + images.Count + (images.Count == 0 ? " (cambiano solo i testi)" : ""));
             Upload(hu, kit, images);
@@ -347,7 +404,48 @@ namespace NbtCompanion.Core
             {
                 throw new StepException(L.T("aa-menu-look non completato (vedi log).", "aa-menu-look not completed (see the log)."));
             }
-            return o;
+            string summary = LookSummary(o, l, tilePresence);
+            Log.Write(summary);
+            return o.TrimEnd() + "\n\n" + summary;
+        }
+
+        /// <summary>The outcome of install.sh in plain words: what changed, where the originals are, what to do next.</summary>
+        public static string LookSummary(string output, string label, string tilePresence)
+        {
+            var changed = new List<string>();
+            var same = new List<string>();
+            foreach (string raw in output.Split('\n'))
+            {
+                string line = raw.Trim();
+                // install.sh prints "OK: <path>" for every file put in place; aa-look's "OK: 522 lines ..." has spaces
+                if (line.StartsWith("OK: ", StringComparison.Ordinal) && line.Length > 4 && line.IndexOf(' ', 4) < 0)
+                {
+                    changed.Add(line.Substring(4));
+                }
+                else if (line.StartsWith("already in place: ", StringComparison.Ordinal))
+                {
+                    same.Add(line.Substring(18));
+                }
+            }
+            var sb = new StringBuilder();
+            sb.Append(L.T("ESITO: ", "OUTCOME: "));
+            if (changed.Count == 0)
+            {
+                sb.Append(L.T("nessun file cambiato sulla testata", "no file changed on the head unit"));
+                sb.Append(same.Count > 0 ? L.T(" (gia' a posto: ", " (already in place: ") + string.Join(", ", same) + ")." : ".");
+                return sb.ToString();
+            }
+            sb.Append(L.T("cambiati sulla testata ", "changed on the head unit ") + changed.Count + L.T(" file: ", " file(s): ") + string.Join(", ", changed.Distinct()) + ". ");
+            sb.Append(L.T("Gli originali di fabbrica sono in /opt/aa/menu-look-backup (elenco in files.txt); \"Ripristina originali\" li rimette. ",
+                "The factory originals are in /opt/aa/menu-look-backup (listed in files.txt); \"Restore originals\" puts them back. "));
+            sb.Append(L.T("Serve il riavvio: tasto di accensione tenuto premuto 30 secondi. ", "A reboot is needed: hold the power button for 30 seconds. "));
+            sb.Append(L.T("Poi la scritta \"", "Then the text \"") + label + L.T("\" compare sulla voce CarLife che fa comparire la casella Android Auto",
+                "\" shows on the CarLife entry that the Android Auto tile brings up"));
+            sb.Append(tilePresence.Length > 0
+                ? " (" + tilePresence + ")."
+                : L.T(": su questa testata la casella non risulta installata ne' in funzione, quindi dopo il riavvio non vedrai nessun cambiamento.",
+                    ": on this head unit the tile is neither installed nor running, so after the reboot you will see no change."));
+            return sb.ToString();
         }
 
         public static string LookRestore(HeadUnit hu, Kit kit)

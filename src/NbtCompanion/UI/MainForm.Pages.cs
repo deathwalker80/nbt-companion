@@ -267,7 +267,7 @@ namespace NbtCompanion.UI
                 hu.Dispose();
                 _hu = null;
                 _unit = null;
-                Log.Write("Scollegato. File temporanei in /dev/shmem/nbtc rimossi.");
+                Log.Write("Scollegato. File temporanei in " + HeadUnit.Stage + " rimossi.");
             });
         }
 
@@ -306,6 +306,7 @@ namespace NbtCompanion.UI
                 }),
                 Act(L.T("Apri SSH", "Open SSH"), DoUnlock, true),
                 Act(L.T("Chiudi SSH", "Close SSH"), DoRevert),
+                Act(L.T("Leggi modalita' energia", "Read energy mode"), DoReadModes),
                 _bApprove);
         }
 
@@ -398,6 +399,45 @@ namespace NbtCompanion.UI
             RunTask(L.T("Chiusura SSH", "SSH closing"), () => Flash(true), false);
         }
 
+        /// <summary>Read-only: EnergyMode (22 100A) and state (22 F186) of the head unit over HSFZ.</summary>
+        private void DoReadModes()
+        {
+            RunTask(L.T("Lettura della modalita' energia", "Energy mode reading"), () =>
+            {
+                if (DiagNet.LinkLocalAddresses().Count == 0)
+                {
+                    throw new StepException(L.T("Nessuna scheda di rete con indirizzo 169.254.x.x.", "No network adapter with a 169.254.x.x address."));
+                }
+                DiscoveryResult disc = DiagNet.Discover(3000)
+                    ?? throw new StepException(L.T("Il gateway non risponde all'annuncio HSFZ (6811): non so a chi chiedere.",
+                        "The gateway does not answer the HSFZ announcement (6811): nobody to ask."));
+                ReportModes(disc.Gateway);
+            }, false);
+        }
+
+        /// <summary>Reads and logs the modes; warns in plain words when the head unit is not in the normal energy mode.</summary>
+        private HuModeReading ReportModes(string gateway)
+        {
+            Log.Write(L.T("Sola lettura via HSFZ ", "Read only over HSFZ ") + gateway + ":" + Hsfz.Port + " (22 100A, 22 F186)");
+            HuModeReading m = Hsfz.ReadModes(gateway);
+            Log.Write(m.Summary());
+            if (m.EnergyNormal)
+            {
+                Log.Write(L.T("Modalita' energia normale (00).", "Energy mode normal (00)."));
+            }
+            else if (m.EnergyNotNormal)
+            {
+                Log.Write(L.T("ATTENZIONE: la testata e' in modalita' energia ", "WARNING: the head unit is in energy mode ") + m.EnergyMode!.Value.ToString("X2")
+                    + L.T(" (03 = Flash: schermo nero). Non rilanciare apertura o chiusura SSH. Il 19/11 una BMW rimasta cosi' e' ripartita con riavvio forzato (tasto di accensione 30 s) e codifica della HU in E-Sys.",
+                        " (03 = Flash: black screen). Do not run SSH open or close again. On 19/11 a BMW left like this came back with a forced reboot (power button 30 s) and coding of the HU in E-Sys."));
+            }
+            else
+            {
+                Log.Write(L.T("Modalita' energia non letta: vedi la riga sopra.", "Energy mode not read: see the line above."));
+            }
+            return m;
+        }
+
         private void Flash(bool revert)
         {
             Unlocker.Python py = Unlocker.FindPython()
@@ -423,6 +463,24 @@ namespace NbtCompanion.UI
                 // discovery and falls back to 169.254.199.99; without a head unit it stops before writing (ABORTED).
                 Log.Write("Annuncio HSFZ (6811) senza risposta (firewall di Windows?): lo script di Xayanix cerca la testata da solo, poi prova 169.254.199.99");
             }
+            // 19/11: "open" was run on a BMW whose SSH was already open; the script put the unit in Flash mode, was
+            // refused at step 4, and the unit stayed on a black screen. Opening an open SSH is never needed.
+            string? sshNow = DiagNet.FindSsh(_settings.Host, gateway, 2000);
+            if (!revert && sshNow != null)
+            {
+                throw new StepException(L.T("SSH e' gia' aperto su ", "SSH is already open on ") + sshNow
+                    + L.T(": non serve aprirlo. Non lancio lo script, non scrivo nulla.", ": no need to open it. The script is not started, nothing is written."));
+            }
+            if (revert && sshNow == null && !Ui(() => Confirm(L.T(
+                    "La porta 22 non risponde: SSH risulta gia' chiuso (o la testata non risponde in SSH).\n\n" +
+                    "La chiusura va lanciata cosi' solo per ripristinare lo starter.cfg di fabbrica su una testata che dopo un'apertura non riparte. " +
+                    "In tutti gli altri casi rispondi No. Procedo con la chiusura?",
+                    "Port 22 does not answer: SSH looks already closed (or the head unit does not answer over SSH).\n\n" +
+                    "Run the closing like this only to put the factory starter.cfg back on a head unit that does not start after an opening. " +
+                    "In every other case answer No. Go on with the closing?"))))
+            {
+                throw new StepException(L.T("Chiusura annullata: SSH gia' chiuso, non scrivo nulla.", "Closing cancelled: SSH already closed, nothing written."));
+            }
             if (_hu != null)
             {
                 try
@@ -436,10 +494,29 @@ namespace NbtCompanion.UI
                 _hu.Dispose();
                 _hu = null;
             }
-            if (!Unlocker.Flash(py, script, gateway, revert))
+            bool written = Unlocker.Flash(py, script, gateway, revert);
+            // the script calls the unit "back in app" as soon as it answers 22 F186 = 01, without reading the energy
+            // mode again (19/11: EnergyMode stayed 03 through six refused EnergyOff); read it here, read only
+            string? diag = gateway ?? _disc?.Gateway;
+            HuModeReading? modes = null;
+            if (diag != null)
+            {
+                System.Threading.Thread.Sleep(5000);
+                modes = ReportModes(diag);
+            }
+            else
+            {
+                Log.Write(L.T("Gateway HSFZ non noto: modalita' energia non letta. Usa \"Leggi modalita' energia\".",
+                    "HSFZ gateway unknown: energy mode not read. Use \"Read energy mode\"."));
+            }
+            if (!written)
             {
                 throw new StepException(L.T("Lo script non ha confermato la scrittura (vedi log): starter.cfg non cambiato.",
-                    "The script did not confirm the write (see the log): starter.cfg not changed."));
+                    "The script did not confirm the write (see the log): starter.cfg not changed.")
+                    + (modes != null && modes.EnergyNotNormal
+                        ? L.T(" La testata e' rimasta in modalita' energia ", " The head unit stayed in energy mode ") + modes.EnergyMode!.Value.ToString("X2")
+                            + L.T(": vedi il log, non rilanciare.", ": see the log, do not run it again.")
+                        : ""));
             }
             if (revert)
             {
@@ -684,10 +761,10 @@ namespace NbtCompanion.UI
             _rAlways = Theme.Radio(L.T("always: casella sempre visibile", "always: tile always shown"), _settings.TileMode == "always");
             _tileOut = Output();
             var notes = Theme.Label(L.T(
-                "Kit dall'ultima release di deathwalker80/nbt-aa-tile (non pre-release), verificato con SHA-256 di GitHub e SHA256SUMS, copiato nella RAM di hu-omap. " +
+                "Kit dall'ultima release di deathwalker80/nbt-aa-tile (non pre-release), verificato con SHA-256 di GitHub e SHA256SUMS, copiato nella cartella di appoggio di hu-omap (/var/opt/nbtc, tolta a fine operazione). " +
                 "Serve nbt-aad 1.8.66 o successivo. Prima la prova in RAM, poi l'avvio automatico: 2 righe in start_webserver.sh (originale conservato), parte solo dopo nbt-aad, " +
                 "si disattiva da solo dopo un crash o 3 avvii non superati. Vale per MINI e BMW (la casella non cambia grafica: i testi e le immagini sono nella pagina 6).",
-                "Kit from the latest release of deathwalker80/nbt-aa-tile (no pre-release), checked with GitHub's SHA-256 and SHA256SUMS, copied into hu-omap's RAM. " +
+                "Kit from the latest release of deathwalker80/nbt-aa-tile (no pre-release), checked with GitHub's SHA-256 and SHA256SUMS, copied into the staging folder on hu-omap (/var/opt/nbtc, removed after the operation). " +
                 "Needs nbt-aad 1.8.66 or later. First the RAM test, then the boot start: 2 lines in start_webserver.sh (original kept), starts only after nbt-aad, " +
                 "disables itself after a crash or 3 failed starts. Works for MINI and BMW (the tile does not change graphics: texts and images are on page 6)."), Theme.Body, Theme.Dim);
             notes.MaximumSize = new Size(880, 0);
@@ -792,8 +869,10 @@ namespace NbtCompanion.UI
             Control content = Grid((form, 0), (_lookList, 50), (_lookOut, 50));
             FillLookList();
             return Page(UnderDevelopment, Theme.Warn, L.T("Grafica della voce ex CarLife (aa-menu-look)", "Look of the former CarLife entry (aa-menu-look)"),
-                L.T("Testi \"Android Auto\" e, se le indichi, le tue immagini PNG al posto di quelle CarLife (stessa larghezza e altezza dell'originale). " +
+                L.T("Cambia la voce CarLife che fa comparire la casella Android Auto (pagina 5): senza la casella la voce non si vede e non vedrai nessun cambiamento. " +
+                    "Testi \"Android Auto\" e, se le indichi, le tue immagini PNG al posto di quelle CarLife (stessa larghezza e altezza dell'originale). " +
                     "Ogni file originale viene salvato una sola volta in /opt/aa/menu-look-backup; \"Ripristina originali\" li rimette tutti. Riavvio a mano.",
+                    "Changes the CarLife entry that the Android Auto tile brings up (page 5): without the tile the entry is not shown and you will see no change. " +
                     "\"Android Auto\" texts and, if you give them, your PNG images instead of the CarLife ones (same width and height as the original). " +
                     "Every original file is saved once in /opt/aa/menu-look-backup; \"Restore originals\" puts all of them back. Reboot by hand."),
                 content,
@@ -818,7 +897,23 @@ namespace NbtCompanion.UI
                         + (_lookList.Items.Count > 0 ? L.T(" e ", " and ") + _lookList.Items.Count + L.T(" immagini", " images") : "")
                         + L.T(" per la marca ", " for brand ") + _cbBrand.SelectedItem + L.T("? Gli originali vengono salvati sulla testata.", "? The originals are saved on the head unit.")))
                     {
-                        LookRun(L.T("Testi e immagini ex CarLife", "Former CarLife texts and images"), (k, b) => TileKits.LookInstall(_hu!, k, b, label, folder));
+                        LookRun(L.T("Testi e immagini ex CarLife", "Former CarLife texts and images"), (k, b) =>
+                        {
+                            string tile = TileKits.TilePresence(_hu!);
+                            if (tile.Length == 0 && !Ui(() => Confirm(L.T(
+                                "Su questa testata la casella Android Auto (nbt-aa-tile) non risulta installata ne' in funzione.\n\n" +
+                                "Questi testi e immagini cambiano solo la voce CarLife che la casella fa comparire: senza la casella la voce non si vede, " +
+                                "quindi dopo il riavvio non vedrai nessun cambiamento (i file sulla testata invece cambiano).\n\n" +
+                                "Prima installa la casella (pagina 5). Procedo lo stesso?",
+                                "On this head unit the Android Auto tile (nbt-aa-tile) is neither installed nor running.\n\n" +
+                                "These texts and images only change the CarLife entry that the tile brings up: without the tile the entry is not shown, " +
+                                "so after the reboot you will see no change (the files on the head unit do change).\n\n" +
+                                "Install the tile first (page 5). Go on anyway?"))))
+                            {
+                                throw new StepException(L.T("Annullato: casella non presente, non ho cambiato nulla.", "Cancelled: no tile, nothing changed."));
+                            }
+                            return TileKits.LookInstall(_hu!, k, b, label, folder, tile);
+                        });
                     }
                 }, true),
                 Act(L.T("Ripristina originali", "Restore originals"), () =>
@@ -958,11 +1053,11 @@ namespace NbtCompanion.UI
             var notes = Theme.Label(L.T(
                 "Da deathwalker80/idrive-plus. L'APK (generico NBT Plus o specifico MINI / BMW / Supra Plus) viene scaricato e controllato (SHA-256 di GitHub) " +
                 "in Documenti\\NBT-Companion\\apk, da copiare sul telefono. I plugin dell'iDrive (Meteo, Notizie, Notizie locali, Carburanti, Traffico, Stato veicolo) " +
-                "vengono installati con lo 00-installa.sh della chiavetta, eseguito dalla RAM di hu-omap: le pagine \"in attesa del telefono\" seguono l'app scelta. " +
+                "vengono installati con lo 00-installa.sh della chiavetta, eseguito dalla cartella di appoggio di hu-omap (/var/opt/nbtc): le pagine \"in attesa del telefono\" seguono l'app scelta. " +
                 "Serve NBT-AAD installato. \"Rimuovi\" sposta i plugin in /opt/aa/plugins_off (recuperabili). Riavvio a mano.",
                 "From deathwalker80/idrive-plus. The APK (generic NBT Plus or specific MINI / BMW / Supra Plus) is downloaded and checked (GitHub SHA-256) " +
                 "into Documents\\NBT-Companion\\apk, to copy to the phone. The iDrive plugins (Weather, News, Local news, Fuel, Traffic, Vehicle status) " +
-                "are installed with the stick's 00-installa.sh, run from hu-omap's RAM: the \"waiting for the phone\" pages follow the chosen app. " +
+                "are installed with the stick's 00-installa.sh, run from the staging folder on hu-omap (/var/opt/nbtc): the \"waiting for the phone\" pages follow the chosen app. " +
                 "NBT-AAD must be installed. \"Remove\" moves the plugins to /opt/aa/plugins_off (recoverable). Reboot by hand."), Theme.Body, Theme.Dim);
             notes.MaximumSize = new Size(880, 0);
             Control content = Grid((form, 0), (notes, 0), (_plusOut, 100));

@@ -21,16 +21,16 @@ unit (OpenSSH + the same shell scripts); the first car tests are on a MINI F60 (
 
 | Page | |
 |---|---|
-| 1 Connection | Finds the head unit on the diagnostic network (HSFZ announcement, UDP 6811) and reads the VIN, checks SSH port 22, logs in as `root` (address and ID5/ID6 default password pre-filled and editable; the password is never saved) and runs a transfer self-test: a test file with all 256 byte values is written to hu-omap's RAM and read back. Then it reads what the unit is: the software version iDrive shows under Navigation > Settings > Position and software version (`/opt/sys/etc/nbt_version.txt`, e.g. `NBTevo_Y21432J`; a version that does not start with `NBTevo_` is flagged) and the brand in the HMI. **Automatic connection:** with the cable in, the app tries port 22 on the address of page 1, the HSFZ gateway and `169.254.199.99` / `169.254.199.119` every few seconds and connects with the password of page 1; it stops after a refused password or a manual "Disconnect", and starts again with "Connect" or when the cable is plugged in again. |
+| 1 Connection | Finds the head unit on the diagnostic network (HSFZ announcement, UDP 6811) and reads the VIN, checks SSH port 22, logs in as `root` (address and ID5/ID6 default password pre-filled and editable; the password is never saved) and runs a transfer self-test: a test file with all 256 byte values is written to the staging folder on hu-omap and read back. The staging folder is `/var/opt/nbtc` (physical path of the `/var` partition, e.g. `/fs/sda1/opt/nbtc`), emptied after every operation: `/dev/shmem` is not used because on the cars it refuses sub-folders. Before use the app checks that the folder can be created, that the partition has at least 64 MB free and that sub-folders really work; otherwise nothing is installed. Then it reads what the unit is: the software version iDrive shows under Navigation > Settings > Position and software version (`/opt/sys/etc/nbt_version.txt`, e.g. `NBTevo_Y21432J`; a version that does not start with `NBTevo_` is flagged) and the brand in the HMI. **Automatic connection:** with the cable in, the app tries port 22 on the address of page 1, the HSFZ gateway and `169.254.199.99` / `169.254.199.119` every few seconds and connects with the password of page 1; it stops after a refused password or a manual "Disconnect", and starts again with "Connect" or when the cable is plugged in again. |
 | 2 SSH | Opens SSH when it is closed and closes it again (see below). |
 | 3 Android Auto (NBT-AAD) | Lists releases **and pre-releases** (sorted by date, with notes), downloads `nbt-aad` + `Releases.zip`, checks GitHub's SHA-256, ARM/QNX ELF, the 5 plugin files, free space, and that the new binary starts on the unit (`--license`) before anything is changed. Update as in Sq00ky's guide: stop nbt-aad, `nbt-aad` -> `nbt-aad.old`, plugin folder -> `/opt/aa/NbtAad.old` (never inside `Plugins`), copy the new one, read back every file (SHA-256), firewall rule with the built-in `--pf-check` / `--pf-install`. Keeps 1 or 2 versions. One-click restore of the previous version (swap). `nbt-aad.env` is not touched. NBT-AAD installed as an **NBTApps package** (NBT-AAD #216, releases from v1.9.84: executable `nbt-aad` in `/var/opt/nbtapp/apps/com.github.sq00ky.android-auto`) is recognised: version shown, hand install / restore refused (it would put two `nbt-aad` on the unit), updates from the NBTApps catalogue. |
 | 4 Menu position | Moves the "Android Auto" and "Open Android Auto" entries between Media/Radio (`insertStateID="20"`) and MINI Connected / ConnectedDrive (`"50"`; checked on MINI, not checked on BMW). Done automatically at every update if the option is on. |
 | 5 Home screen tile | [nbt-aa-tile](https://github.com/deathwalker80/nbt-aa-tile): RAM test, boot install, removal, status. |
-| 6 Former CarLife look | nbt-aa-tile's `aa-menu-look`: "Android Auto" texts and your own PNGs instead of the CarLife ones (MINI, BMW, BMW M, BMW i), factory files backed up once, full restore. |
+| 6 Former CarLife look | nbt-aa-tile's `aa-menu-look`: "Android Auto" texts and your own PNGs instead of the CarLife ones (MINI, BMW, BMW M, BMW i), factory files backed up once, full restore. It changes only the CarLife entry that the tile of page 5 brings up: before applying, the app checks that the tile is installed at boot or running and asks before going on without it (the files would change but nothing would be visible). At the end it says in plain words which files changed, where the originals are and that a reboot is needed. It also logs `/dev/shmem/version_textdb.txt` (read only), to find out which brand texts the menu uses. |
 | 7 nbt-aad.env | Read, edit, write back (previous version saved on the PC). Hand install: `/opt/aa/nbt-aad.env`; NBTApps package: `/var/opt/nbtapp/data/com.github.sq00ky.android-auto/nbt-aad.env`. |
 | 8 Diagnostics | Read-only ZIP with logs and state. Never raw device reads. |
-| 9 NBT Plus apps | [iDrive Plus / NBT Plus](https://github.com/deathwalker80/idrive-plus): downloads the phone APK (generic NBT Plus or MINI / BMW / Supra Plus, GitHub SHA-256 checked) and installs or removes the iDrive plugins of the latest `USB_vNN.zip` with its own `00-installa.sh` / `10-togli.sh`, run from hu-omap's RAM. |
-| 10 NBT EVO apps | [nbt-evo-apps](https://github.com/deathwalker80/nbt-evo-apps) (apps that run on the head unit itself, e.g. MINI Sport, and the next ones): reads the latest release with the stick zip (`nbt-evo-apps*.zip`), checks it (GitHub SHA-256, `files.sum` of every package with the POSIX cksum `pkg.sh` uses, QNX ARM libraries), shows every package with its brand, status, version in the release and version installed, and installs / updates / removes / restores it with the stick's own `pkg.sh` run from hu-omap's RAM (`NEA_STICK`). An app for another brand is not installed. "Download zip" saves the release zip for a USB stick. |
+| 9 NBT Plus apps | [iDrive Plus / NBT Plus](https://github.com/deathwalker80/idrive-plus): downloads the phone APK (generic NBT Plus or MINI / BMW / Supra Plus, GitHub SHA-256 checked) and installs or removes the iDrive plugins of the latest `USB_vNN.zip` with its own `00-installa.sh` / `10-togli.sh`, run from the staging folder on hu-omap. |
+| 10 NBT EVO apps | [nbt-evo-apps](https://github.com/deathwalker80/nbt-evo-apps) (apps that run on the head unit itself, e.g. MINI Sport, and the next ones): reads the latest release with the stick zip (`nbt-evo-apps*.zip`), checks it (GitHub SHA-256, `files.sum` of every package with the POSIX cksum `pkg.sh` uses, QNX ARM libraries), shows every package with its brand, status, version in the release and version installed, and installs / updates / removes / restores it with the stick's own `pkg.sh` run from the staging folder on hu-omap (`NEA_STICK`). An app for another brand is not installed. "Download zip" saves the release zip for a USB stick. |
 | 11 Updates | One list with NBT Companion, NBT-AAD and DeathWalkeR's programs: what is on the connected unit (compared by SHA-256) against the latest release on GitHub, and "Update selected". Only what is already installed is updated from here (the first install stays on its own page). NBT-AAD: only a known build older than the latest release is offered; a newer pre-release is never taken back, a new pre-release is only signalled (install it from page 3), an unknown build is left alone. After an update the list is checked again. |
 
 Colour icons of the Android Auto entry (`NbtAad_ALL_Images.zip`) are kept at every update: the ones of the plugin on
@@ -57,6 +57,17 @@ What the script does (from its README): HSFZ 6801, programming session, security
 reboot SSH 22, telnet 23 and qconn 8000 are open as root. Closing writes the factory `starter.cfg` back.
 NBT-Evo 007.xxx family only, **not** 001_05x. SSH left open can raise fault code B7F8E5
 ([NBT-AAD issue #190](https://github.com/Sq00ky/Supra-iDrive6-Android-Auto/issues/190)).
+
+Before running the script the app checks port 22: **"Open SSH" is refused when SSH already answers**, and "Close SSH"
+asks for an extra confirmation when port 22 does not answer (closing is then only for putting the factory
+`starter.cfg` back on a unit that does not start). The reason: on 19 Nov 2026 "Open SSH" was run on a BMW whose SSH was
+already open; the script put the unit in Flash energy mode (black screen), was refused at its step 4 (nothing
+written), could not clear the energy mode (six refused `EnergyOff`) and reset the unit; the unit came back only after a
+forced reboot and coding of the HU in E-Sys.
+
+After the script, and with the **"Read energy mode"** button, the app reads the energy mode (`22 100A`, 00 normal,
+03 Flash) and the state (`22 F186`) of the head unit over HSFZ, **read only** (only ReadDataByIdentifier is sent), and
+says it in plain words when the unit is not back in the normal mode.
 
 ## Requirements
 
@@ -104,9 +115,16 @@ legge e scrive nella cartella dati del pacchetto.
 
 Pagina 10 "App NBT EVO": le app di nbt-evo-apps che girano sulla testata (MINI Sport e le prossime), dall'ultima release
 con lo zip della chiavetta: controllo dello zip, installazione / aggiornamento / rimozione / versione precedente col
-pkg.sh della chiavetta eseguito dalla RAM di hu-omap; "Scarica zip" salva lo zip per la chiavetta USB.
+pkg.sh della chiavetta eseguito dalla cartella di appoggio di hu-omap (/var/opt/nbtc); "Scarica zip" salva lo zip per la chiavetta USB.
 
 Pagina 11 "Aggiornamenti": NBT Companion, NBT-AAD e i programmi di DeathWalkeR in un unico elenco, con quello che c'e'
 sulla testata (confronto SHA-256 o versione) e l'ultima release su GitHub; aggiorna solo cio' che e' gia' installato.
+Apertura SSH rifiutata se l'SSH e' gia' aperto; chiusura con conferma in piu' se la porta 22 non risponde. Dopo lo
+script, e col pulsante "Leggi modalita' energia", l'app legge in sola lettura la modalita' energia della testata
+(22 100A: 00 normale, 03 Flash = schermo nero) e lo dice in chiaro.
+
+Pagina 6 (grafica ex CarLife): prima di applicare controlla che la casella sia installata o in funzione (senza casella la
+voce non si vede) e a fine operazione scrive in chiaro cosa e' cambiato, dove sono gli originali e che serve il riavvio.
+
 Stato: **testati** NBT Plus (plugin iDrive e app) e MINI Sport; NBT Companion, casella nella home, grafica ex CarLife e
 le altre app di nbt-evo-apps **in sviluppo**; NBT-AAD e' di terzi.

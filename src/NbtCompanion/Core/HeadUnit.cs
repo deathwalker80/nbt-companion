@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Renci.SshNet;
@@ -38,13 +39,22 @@ namespace NbtCompanion.Core
 
     /// <summary>
     /// SSH session with the head unit. The login lands on hu-jacinto; everything of nbt-aad, the HMI and the plugins is
-    /// on hu-omap, reached with  on -f /net/hu-omap/ /bin/sh ...  Files for omap are staged in omap's /dev/shmem/nbtc
-    /// (RAM, emptied at every power-on) with the transfer method that passed the self-test of this session.
+    /// on hu-omap, reached with  on -f /net/hu-omap/ /bin/sh ...  Files for omap are staged in a folder of omap's /var
+    /// partition (Stage, e.g. /fs/sda1/opt/nbtc), emptied after every operation, with the transfer method that passed
+    /// the self-test of this session. /dev/shmem cannot be used: on the cars (19/11, BMW NBTevo_Y22292I) it refuses
+    /// folders (mkdir: Function not implemented), so the scripts of the kits could not list their own files.
     /// </summary>
     public sealed class HeadUnit : IDisposable
     {
         public const string Omap = "/net/hu-omap/";
-        public const string Stage = "/dev/shmem/nbtc";
+        /// <summary>Written in the kit scripts in place of the staging folder, replaced at upload time.</summary>
+        public const string StageToken = "@NBTC_STAGE@";
+        /// <summary>Free space needed in the staging partition before anything is copied there.</summary>
+        public const long StageMinFreeKb = 65536;
+        /// <summary>Staging folder on hu-omap, set by the transfer self-test of the session (physical path of /var/opt/nbtc).</summary>
+        public static string Stage { get; private set; } = "/var/opt/nbtc";
+        /// <summary>Single file in jacinto's RAM used only by the ViaJacinto transfer (no folder).</summary>
+        private const string JacintoTmp = "/dev/shmem/nbtc-up.tmp";
         public const string AaDir = "/opt/aa";
         public const string PluginDir = "/opt/hmi/ID5/data/ro/Plugins/NbtAad";
         public const string HmiRo = "/opt/hmi/ID5/data/ro";
@@ -240,8 +250,9 @@ namespace NbtCompanion.Core
         }
 
         /// <summary>
-        /// Finds a way to write files into omap's RAM and to read them back, checked byte for byte with a test file
-        /// that holds all 256 byte values. Nothing outside /dev/shmem/nbtc is touched.
+        /// Prepares the staging folder (PrepareStage) and finds a way to write files into it and to read them back,
+        /// checked byte for byte with a test file that holds all 256 byte values. Nothing outside the staging folder
+        /// is touched (and jacinto's /dev/shmem/nbtc-up.tmp, for the ViaJacinto way).
         /// </summary>
         public void TransferSelfTest()
         {
@@ -254,12 +265,7 @@ namespace NbtCompanion.Core
                     "hu-omap is not in /net: this is not an NBT EVO as expected."));
             }
             _jacintoNode = names.FirstOrDefault(n => n.Contains("jacinto")) ?? "";
-            Run("mkdir -p " + Stage, 20);
-            CmdResult mk = OmapShell("mkdir -p " + Stage, 30);
-            if (mk.TimedOut)
-            {
-                throw new StepException(L.T("hu-omap non risponde a  on -f.", "hu-omap does not answer to  on -f."));
-            }
+            PrepareStage();
 
             var rnd = new Random(1980);
             byte[] probe = new byte[49152];
@@ -323,13 +329,13 @@ namespace NbtCompanion.Core
                     r = Run("cat > /net/hu-omap" + omapPath, 120, data, true);
                     break;
                 case WriteWay.ViaJacinto:
-                    r = Run("cat > " + Stage + "/up.tmp", 120, data, true);
+                    r = Run("cat > " + JacintoTmp, 120, data, true);
                     if (r.TimedOut || r.Exit != 0)
                     {
                         return false;
                     }
-                    r = OmapShell("cp /net/" + _jacintoNode + Stage + "/up.tmp " + omapPath, 120, null, true);
-                    Run("rm -f " + Stage + "/up.tmp", 20, null, true);
+                    r = OmapShell("cp /net/" + _jacintoNode + JacintoTmp + " " + omapPath, 120, null, true);
+                    Run("rm -f " + JacintoTmp, 20, null, true);
                     break;
                 case WriteWay.OnStdin:
                     r = OmapShell("cat > " + omapPath, 120, data, true);
@@ -413,8 +419,89 @@ namespace NbtCompanion.Core
             if (TransferReady)
             {
                 OmapShell("rm -rf " + Stage, 60, null, true);
-                Run("rm -rf " + Stage, 30, null, true);
             }
+        }
+
+        /// <summary>
+        /// Staging folder in omap's /var partition (on the cars /var -> /fs/sda1, read-write without remount, the
+        /// same partition where NBT-AAD and NBTApps keep their data and run their programs). The physical path is
+        /// used, so the direct writes through /net/hu-omap do not depend on the /var link. Before use: the folder
+        /// must be created, the partition must have StageMinFreeKb free, and sub-folders must really work
+        /// (create, write, list, remove). Otherwise nothing is installed.
+        /// </summary>
+        private void PrepareStage()
+        {
+            CmdResult v = OmapShell("ls -ld /var", 20);
+            if (v.TimedOut)
+            {
+                throw new StepException(L.T("hu-omap non risponde a  on -f.", "hu-omap does not answer to  on -f."));
+            }
+            string root = StageRootFromLs(v.Text)
+                ?? throw new StepException(L.T("Non riconosco /var su hu-omap (", "Cannot recognise /var on hu-omap (") + v.All.Trim()
+                    + L.T("): non installo nulla.", "): nothing will be installed."));
+            Stage = root + "/opt/nbtc";
+            CmdResult mk = OmapShell("mkdir -p " + Stage + " && echo MK-OK", 30);
+            if (!mk.Text.Contains("MK-OK"))
+            {
+                throw new StepException(L.T("Non riesco a creare la cartella di appoggio ", "Cannot create the staging folder ") + Stage
+                    + L.T(": non installo nulla.", ": nothing will be installed."));
+            }
+            CmdResult df = OmapShell("df -k " + Stage, 20);
+            long free = FreeKbFromDf(df.Text);
+            if (free < StageMinFreeKb)
+            {
+                throw new StepException(L.T("Spazio libero insufficiente o non leggibile per ", "Free space too low or unreadable for ") + Stage + " ("
+                    + (free < 0 ? "?" : (free / 1024) + " MB") + L.T(", ne servono almeno ", ", at least ") + (StageMinFreeKb / 1024)
+                    + L.T(" MB): non installo nulla.", " MB needed): nothing will be installed."));
+            }
+            string t = Stage + "/dirtest";
+            CmdResult d = OmapShell("rm -rf " + t + " && mkdir -p " + t + "/a && echo x > " + t + "/a/f && ls " + t + "/a && rm -rf " + t
+                + " && test ! -d " + t + " && echo DIR-OK", 30);
+            if (!d.Text.Contains("DIR-OK") || !Regex.IsMatch(d.Text, @"(^|\n)f(\r?\n|$)"))
+            {
+                throw new StepException(L.T("Nella cartella di appoggio ", "In the staging folder ") + Stage
+                    + L.T(" le sottocartelle non funzionano: non installo nulla.", " sub-folders do not work: nothing will be installed."));
+            }
+            Log.Write("Cartella di appoggio: " + Stage + " (" + (free / 1024) + " MB liberi), sottocartelle verificate");
+        }
+
+        /// <summary>Physical root of /var from  ls -ld /var : the link target, or /var itself if it is a folder.</summary>
+        public static string? StageRootFromLs(string ls)
+        {
+            string line = ls.Split('\n').Select(x => x.Trim()).FirstOrDefault(x => x.Length > 0) ?? "";
+            string root;
+            int arrow = line.IndexOf(" -> ", StringComparison.Ordinal);
+            if (line.StartsWith("l", StringComparison.Ordinal) && arrow > 0)
+            {
+                root = line.Substring(arrow + 4).Trim();
+            }
+            else if (line.StartsWith("d", StringComparison.Ordinal))
+            {
+                root = "/var";
+            }
+            else
+            {
+                return null;
+            }
+            root = root.TrimEnd('/');
+            return Regex.IsMatch(root, @"^/[A-Za-z0-9_./-]+$") && !root.Contains("..") ? root : null;
+        }
+
+        /// <summary>Available KB from  df -k  (QNX and Linux): the field before the one with the percent sign. -1 if not found.</summary>
+        public static long FreeKbFromDf(string df)
+        {
+            foreach (string line in df.Split('\n').Reverse())
+            {
+                string[] w = line.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+                for (int i = 1; i < w.Length; i++)
+                {
+                    if (w[i].EndsWith("%", StringComparison.Ordinal) && w[i].TrimEnd('%').All(char.IsDigit) && long.TryParse(w[i - 1], out long kb))
+                    {
+                        return kb;
+                    }
+                }
+            }
+            return -1;
         }
     }
 }

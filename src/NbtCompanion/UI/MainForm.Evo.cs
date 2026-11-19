@@ -65,11 +65,11 @@ namespace NbtCompanion.UI
             form.Controls.Add(_lEvoRelease, 1, 1);
             var notes = Theme.Label(L.T(
                 "Da deathwalker80/nbt-evo-apps: app che girano sulla testata (MINI Sport e le prossime). Lo zip della release viene controllato " +
-                "(SHA-256 di GitHub, files.sum di ogni pacchetto, librerie QNX ARM), copiato nella RAM di hu-omap e installato col pkg.sh della chiavetta: " +
+                "(SHA-256 di GitHub, files.sum di ogni pacchetto, librerie QNX ARM), copiato nella cartella di appoggio di hu-omap (/var/opt/nbtc) e installato col pkg.sh della chiavetta: " +
                 "prima di un aggiornamento la versione in uso resta come precedente (una sola), \"Togli\" sposta l'app in /opt/aa/plugins_off. " +
                 "Riavvio a mano: tasto di accensione tenuto premuto 30 secondi. \"Scarica zip\" salva lo zip in Documenti\\NBT-Companion\\nbt-evo-apps per la chiavetta USB.",
                 "From deathwalker80/nbt-evo-apps: apps that run on the head unit (MINI Sport and the next ones). The release zip is checked " +
-                "(GitHub SHA-256, files.sum of every package, QNX ARM libraries), copied into hu-omap's RAM and installed with the stick's pkg.sh: " +
+                "(GitHub SHA-256, files.sum of every package, QNX ARM libraries), copied into the staging folder on hu-omap (/var/opt/nbtc) and installed with the stick's pkg.sh: " +
                 "before an update the version in use is kept as the previous one (only one), \"Remove\" moves the app to /opt/aa/plugins_off. " +
                 "Reboot by hand: hold the power button for 30 seconds. \"Download zip\" saves the zip in Documents\\NBT-Companion\\nbt-evo-apps for a USB stick."),
                 Theme.Body, Theme.Dim);
