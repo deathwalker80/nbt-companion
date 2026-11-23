@@ -834,8 +834,8 @@ namespace NbtCompanion.UI
             var browse = Theme.Button(L.T("Cartella immagini...", "Images folder..."));
             browse.Click += (s, e) =>
             {
-                using var d = new FolderBrowserDialog { Description = L.T("Cartella con le immagini (stessa struttura di images/ del kit: mini/..., bmw/..., common/...)",
-                    "Folder with the images (same layout as the kit's images/: mini/..., bmw/..., common/...)") };
+                using var d = new FolderBrowserDialog { Description = L.T("Cartella con le immagini (stessa struttura di images/ del kit: mini/..., bmw/..., common/...; per BMW M e BMW i la casella e' in bmw/id6l/widgetasset/CarLifePad/resources/)",
+                    "Folder with the images (same layout as the kit's images/: mini/..., bmw/..., common/...; for BMW M and BMW i the tile is in bmw/id6l/widgetasset/CarLifePad/resources/)") };
                 if (d.ShowDialog(this) == DialogResult.OK)
                 {
                     _tImages.Text = d.SelectedPath;
@@ -871,10 +871,14 @@ namespace NbtCompanion.UI
             return Page(UnderDevelopment, Theme.Warn, L.T("Grafica della voce ex CarLife (aa-menu-look)", "Look of the former CarLife entry (aa-menu-look)"),
                 L.T("Cambia la voce CarLife che fa comparire la casella Android Auto (pagina 5): senza la casella la voce non si vede e non vedrai nessun cambiamento. " +
                     "Testi \"Android Auto\" e, se le indichi, le tue immagini PNG al posto di quelle CarLife (stessa larghezza e altezza dell'originale). " +
-                    "Ogni file originale viene salvato una sola volta in /opt/aa/menu-look-backup; \"Ripristina originali\" li rimette tutti. Riavvio a mano.",
+                    "Ogni file originale viene salvato una sola volta in /opt/aa/menu-look-backup; \"Ripristina originali\" li rimette tutti. Riavvio a mano. " +
+                    "BMW M e BMW i: le immagini della casella vanno in bmw/id6l/widgetasset/CarLifePad/resources/, non in bmwm/ o bmwi/. " +
+                    "Per passare a un kit nuovo basta \"Applica\" con la stessa marca: riparte dalla copia di fabbrica, senza ripristino.",
                     "Changes the CarLife entry that the Android Auto tile brings up (page 5): without the tile the entry is not shown and you will see no change. " +
                     "\"Android Auto\" texts and, if you give them, your PNG images instead of the CarLife ones (same width and height as the original). " +
-                    "Every original file is saved once in /opt/aa/menu-look-backup; \"Restore originals\" puts all of them back. Reboot by hand."),
+                    "Every original file is saved once in /opt/aa/menu-look-backup; \"Restore originals\" puts all of them back. Reboot by hand. " +
+                    "BMW M and BMW i: the tile images go in bmw/id6l/widgetasset/CarLifePad/resources/, not in bmwm/ or bmwi/. " +
+                    "To move to a new kit just \"Apply\" with the same brand: it starts again from the factory copy, no restore needed."),
                 content,
                 Act(L.T("Elenca immagini della testata", "List head unit images"), () => LookRun(L.T("Immagini CarLife della testata", "Head unit CarLife images"),
                     (k, b) => TileKits.LookList(_hu!, k, b))),

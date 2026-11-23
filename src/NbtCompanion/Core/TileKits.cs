@@ -45,9 +45,13 @@ namespace NbtCompanion.Core
             return TileFromZip(zip, label);
         }
 
+        /// <summary>Asset name of the aa-menu-look kit: aa-menu-look-2.zip, aa-menu-look-2.2.zip, ...</summary>
+        public static readonly Regex LookAsset = new Regex(@"^aa-menu-look-\d+(\.\d+)*\.zip$");
+
         public static Kit FetchLook()
         {
-            byte[] zip = FetchZip(new Regex(@"^aa-menu-look-\d+\.zip$"), "aa-menu-look", out string label);
+            // the kit has its own releases since 2.1 (aa-menu-look-2.1.zip, aa-menu-look-2.2.zip); v5 carries aa-menu-look-2.zip
+            byte[] zip = FetchZip(LookAsset, "aa-menu-look", out string label);
             return LookFromZip(zip, label);
         }
 
@@ -288,7 +292,9 @@ namespace NbtCompanion.Core
 
         /// <summary>
         /// PNGs from a PC folder that mirrors images/ of the kit (a folder "images" inside it is also accepted):
-        /// only &lt;brand&gt;/ and common/, only .png in lower case. Keys are "images/&lt;path&gt;".
+        /// only &lt;brand&gt;/ and common/, and for bmwm and bmwi also bmw/ (the same folders install.sh 2.2 uses: on BMW M
+        /// the tile images are only in bmw/id6l/widgetasset/CarLifePad/resources/), only .png in lower case.
+        /// Keys are "images/&lt;path&gt;".
         /// </summary>
         public static Dictionary<string, byte[]> CollectImages(string folder, string brand)
         {
@@ -298,7 +304,7 @@ namespace NbtCompanion.Core
                 return map;
             }
             string root = Directory.Exists(Path.Combine(folder, "images")) ? Path.Combine(folder, "images") : folder;
-            foreach (string top in new[] { brand, "common" })
+            foreach (string top in ImageTops(brand))
             {
                 string d = Path.Combine(root, top);
                 if (!Directory.Exists(d))
@@ -323,6 +329,12 @@ namespace NbtCompanion.Core
                 }
             }
             return map;
+        }
+
+        /// <summary>Top folders of images/ used for a brand, in install.sh 2.2 order.</summary>
+        public static string[] ImageTops(string brand)
+        {
+            return brand == "bmwm" || brand == "bmwi" ? new[] { brand, "bmw", "common" } : new[] { brand, "common" };
         }
 
         public static string CheckLabel(string label)
